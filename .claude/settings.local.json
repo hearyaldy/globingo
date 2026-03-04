@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(unzip:*)",
+      "Bash(flutter pub get:*)",
+      "Bash(flutter build web:*)"
+    ]
+  }
+}

@@ -1,0 +1,149 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(uid) {
+      return isSignedIn() && request.auth.uid == uid;
+    }
+
+    function isAdmin() {
+      return isSignedIn() && request.auth.token.admin == true;
+    }
+
+    function bookingParticipant() {
+      return isSignedIn()
+        && (
+          request.auth.uid == resource.data.learnerId
+          || request.auth.uid == resource.data.teacherId
+        );
+    }
+
+    function userDoc(uid) {
+      return get(/databases/$(database)/documents/users/$(uid));
+    }
+
+    function teacherDoc(uid) {
+      return get(/databases/$(database)/documents/teachers/$(uid));
+    }
+
+    function canTeach(uid) {
+      return exists(/databases/$(database)/documents/users/$(uid))
+        && (userDoc(uid).data.teachingModeEnabled == true);
+    }
+
+    match /users/{userId} {
+      allow read, write: if isOwner(userId) || isAdmin();
+    }
+
+    match /teachers/{teacherId} {
+      allow read: if true;
+      allow create: if (
+          isOwner(teacherId)
+          && canTeach(request.auth.uid)
+          && request.resource.data.uid == request.auth.uid
+        ) || isAdmin();
+      allow update, delete: if (
+          isOwner(teacherId)
+          && canTeach(request.auth.uid)
+        ) || isAdmin();
+    }
+
+    match /bookings/{bookingId} {
+      allow read: if bookingParticipant() || isAdmin();
+
+      allow create: if (
+          isSignedIn()
+        && request.resource.data.slotId is string
+        && request.resource.data.slotId == bookingId
+        && request.resource.data.learnerId == request.auth.uid
+        && request.resource.data.teacherId is string
+        && request.resource.data.teacherDocId is string
+        && exists(/databases/$(database)/documents/teachers/$(request.resource.data.teacherDocId))
+        && get(/databases/$(database)/documents/teachers/$(request.resource.data.teacherDocId)).data.uid == request.resource.data.teacherId
+        && canTeach(request.resource.data.teacherId)
+        && request.resource.data.status == "pending"
+        && request.resource.data.createdAt == request.time
+        && request.resource.data.updatedAt == request.time
+        ) || isAdmin();
+
+      allow update: if (
+          isSignedIn()
+        && request.resource.data.learnerId == resource.data.learnerId
+        && request.resource.data.teacherId == resource.data.teacherId
+        && request.resource.data.createdAt == resource.data.createdAt
+        && request.resource.data.diff(resource.data).changedKeys().hasOnly(["status", "updatedAt"])
+        && request.resource.data.updatedAt == request.time
+        && (
+          (
+            request.auth.uid == resource.data.teacherId
+            && (
+              (
+                resource.data.status == "pending"
+                && request.resource.data.status in ["accepted", "rejected"]
+              )
+            )
+          )
+          || (
+            bookingParticipant()
+            && (
+              (
+                resource.data.status == "accepted"
+                && request.resource.data.status == "in_progress"
+              )
+              || (
+                resource.data.status == "in_progress"
+                && request.resource.data.status == "completed"
+              )
+            )
+          )
+          || (
+            request.auth.uid == resource.data.learnerId
+            && resource.data.status == "pending"
+            && request.resource.data.status == "cancelled"
+          )
+        )
+      ) || isAdmin();
+
+      allow delete: if isAdmin();
+    }
+
+    match /lesson_offers/{offerId} {
+      allow read: if true;
+      allow create: if (
+          isSignedIn()
+          && canTeach(request.auth.uid)
+          && request.resource.data.teacherId == request.auth.uid
+        ) || isAdmin();
+      allow update, delete: if (
+          isSignedIn()
+          && resource.data.teacherId == request.auth.uid
+          && canTeach(request.auth.uid)
+        ) || isAdmin();
+    }
+
+    match /reviews/{reviewId} {
+      allow read: if true;
+
+      allow create: if (
+          isSignedIn()
+        && request.resource.data.reviewerId == request.auth.uid
+        && request.resource.data.teacherId is string
+        && request.resource.data.bookingId is string
+        && exists(/databases/$(database)/documents/bookings/$(request.resource.data.bookingId))
+        && get(/databases/$(database)/documents/bookings/$(request.resource.data.bookingId)).data.learnerId == request.auth.uid
+        && get(/databases/$(database)/documents/bookings/$(request.resource.data.bookingId)).data.teacherId == request.resource.data.teacherId
+        && get(/databases/$(database)/documents/bookings/$(request.resource.data.bookingId)).data.status == "completed"
+        && request.resource.data.createdAt == request.time
+        && request.resource.data.updatedAt == request.time
+      ) || isAdmin();
+
+      allow update, delete: if (
+          isSignedIn()
+          && resource.data.reviewerId == request.auth.uid
+        ) || isAdmin();
+    }
+  }
+}

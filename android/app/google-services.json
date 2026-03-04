@@ -1,0 +1,39 @@
+{
+  "project_info": {
+    "project_number": "489642650167",
+    "project_id": "globingo-4362f",
+    "storage_bucket": "globingo-4362f.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:489642650167:android:f949c0413530e3af0cedb2",
+        "android_client_info": {
+          "package_name": "com.haweeinc.globingo"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "489642650167-0n6l2gih4ldai1c1rb7q3ofult6td0i0.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyA4n-k01hbMBCvnxFDUOg53TrpoUJOevHA"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "489642650167-0n6l2gih4ldai1c1rb7q3ofult6td0i0.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
