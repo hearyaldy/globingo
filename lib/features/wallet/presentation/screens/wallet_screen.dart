@@ -407,18 +407,27 @@ class _TransactionTile extends StatelessWidget {
               Text(
                 record.type.replaceAll('_', ' '),
                 style: AppTypography.labelLarge,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
               ),
               const SizedBox(height: 2),
               Text(
                 'Status: ${record.status.name} • Bucket: ${record.bucket.name}',
                 style: AppTypography.bodySmall,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
               ),
             ],
           ),
         ),
-        Text(
-          '$sign${record.amount.toStringAsFixed(2)} ${record.currency}',
-          style: AppTypography.labelLarge.copyWith(color: amountColor),
+        Flexible(
+          child: Text(
+            '$sign${record.amount.toStringAsFixed(2)} ${record.currency}',
+            style: AppTypography.labelLarge.copyWith(color: amountColor),
+            textAlign: TextAlign.end,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
         ),
       ],
     );

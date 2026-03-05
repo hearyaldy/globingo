@@ -10,7 +10,6 @@ class GroupLessonRepository {
     return _firestore
         .collection('group_lessons')
         .where('status', isEqualTo: 'scheduled')
-        .orderBy('scheduledAt')
         .snapshots();
   }
 
@@ -20,7 +19,6 @@ class GroupLessonRepository {
     return _firestore
         .collection('group_lessons')
         .where('teacherId', isEqualTo: teacherId)
-        .orderBy('scheduledAt', descending: true)
         .snapshots();
   }
 
@@ -28,17 +26,23 @@ class GroupLessonRepository {
     required String teacherId,
     required String teacherDocId,
     required String title,
+    String? description,
     required String language,
+    String? level,
     required int capacity,
     required double pricePerSeat,
     required DateTime scheduledAt,
     required int durationMinutes,
   }) {
-    return _firestore.collection('group_lessons').add({
+    final lessonRef = _firestore.collection('group_lessons').doc();
+    return lessonRef.set({
+      'lessonId': lessonRef.id,
       'teacherId': teacherId,
       'teacherDocId': teacherDocId,
       'title': title,
+      'description': (description ?? '').trim(),
       'language': language,
+      'level': (level ?? '').trim(),
       'capacity': capacity,
       'enrolledCount': 0,
       'pricePerSeat': pricePerSeat,
@@ -46,6 +50,37 @@ class GroupLessonRepository {
       'scheduledAt': Timestamp.fromDate(scheduledAt),
       'durationMinutes': durationMinutes,
       'createdAt': FieldValue.serverTimestamp(),
+      'updatedAt': FieldValue.serverTimestamp(),
+    });
+  }
+
+  Future<void> updateLesson({
+    required String lessonId,
+    required String title,
+    String? description,
+    required String language,
+    String? level,
+    required int capacity,
+    required double pricePerSeat,
+    required DateTime scheduledAt,
+    required int durationMinutes,
+  }) {
+    return _firestore.collection('group_lessons').doc(lessonId).update({
+      'title': title,
+      'description': (description ?? '').trim(),
+      'language': language,
+      'level': (level ?? '').trim(),
+      'capacity': capacity,
+      'pricePerSeat': pricePerSeat,
+      'scheduledAt': Timestamp.fromDate(scheduledAt),
+      'durationMinutes': durationMinutes,
+      'updatedAt': FieldValue.serverTimestamp(),
+    });
+  }
+
+  Future<void> cancelLesson({required String lessonId}) {
+    return _firestore.collection('group_lessons').doc(lessonId).update({
+      'status': 'cancelled',
       'updatedAt': FieldValue.serverTimestamp(),
     });
   }

@@ -369,7 +369,7 @@ This board translates Phase 2 proposal scope into executable tickets with depend
 ## Sprint 3: Group Learning and Engagement
 
 ### P2-010 Group lesson creation and management
-- Status: `TODO`
+- Status: `IN_PROGRESS`
 - Priority: `P0`
 - Depends on: `P2-002`, `P2-003`
 - Scope:
@@ -380,9 +380,27 @@ This board translates Phase 2 proposal scope into executable tickets with depend
 - Acceptance criteria:
   - Group sessions persist correctly with seat limits.
   - Teacher can manage session lifecycle.
+- Notes:
+  - Added teacher group lesson management screen:
+    - `lib/features/group_lessons/presentation/screens/group_lessons_manage_screen.dart`
+    - create/edit/cancel scheduled group sessions
+    - schedule, capacity, and price inputs with validation
+  - Added route wiring:
+    - `lib/core/config/routes.dart` -> `/group-lessons/manage`
+    - Teaching dashboard quick action now links to group lesson management.
+  - Updated repository behavior for rules compliance:
+    - `lib/features/group_lessons/data/repositories/group_lesson_repository.dart`
+    - create now writes deterministic `lessonId` field matching document ID
+    - added update and cancel helpers for teacher lifecycle actions
+  - Added enrollment seat sync automation:
+    - `functions/src/index.ts`
+    - `groupEnrollmentCreatedHook` increments `group_lessons.enrolledCount` when a seat is successfully taken
+    - `groupEnrollmentCancelledHook` decrements `enrolledCount` on learner cancellation
+  - Added capacity guard at rules layer:
+    - `firestore.rules` now blocks enrollment create when `enrolledCount >= capacity`
 
 ### P2-011 Group lesson discovery and enrollment
-- Status: `TODO`
+- Status: `IN_PROGRESS`
 - Priority: `P0`
 - Depends on: `P2-010`
 - Scope:
@@ -394,6 +412,14 @@ This board translates Phase 2 proposal scope into executable tickets with depend
 - Acceptance criteria:
   - Enrollment respects capacity and schedule constraints.
   - Learner sees enrolled sessions in courses/dashboard.
+- Notes:
+  - Added capacity guard in Firestore rules for enrollment creation:
+    - blocks new enrollments when `group_lessons.enrolledCount >= capacity`
+  - Added seat-count synchronization hooks in functions:
+    - `groupEnrollmentCreatedHook` (increment on successful enroll)
+    - `groupEnrollmentCancelledHook` (decrement on cancellation transition)
+  - Added/updated rules test coverage:
+    - full session enrollment is denied in `tests/firestore.rules.test.js`
 
 ### P2-012 Group session room and attendance tracking
 - Status: `TODO`

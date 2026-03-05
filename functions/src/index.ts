@@ -1047,3 +1047,173 @@ export const reviewQualityPolicyHook = onDocumentCreated('reviews/{reviewId}', a
     teacherId,
   });
 });
+
+// P2-010/P2-011: keep group lesson seat counts in sync with enrollments.
+export const groupEnrollmentCreatedHook = onDocumentCreated(
+  'group_enrollments/{enrollmentId}',
+  async (event) => {
+    const enrollmentId = event.params.enrollmentId;
+    const db = getFirestore();
+    const enrollmentRef = db.doc(`group_enrollments/${enrollmentId}`);
+
+    await db.runTransaction(async (trx) => {
+      const enrollmentSnap = await trx.get(enrollmentRef);
+      if (!enrollmentSnap.exists) {
+        return;
+      }
+
+      const enrollment = enrollmentSnap.data() as {
+        lessonId?: string;
+        status?: string;
+        learnerId?: string;
+        seatCounted?: boolean;
+      };
+
+      if (enrollment.status !== 'enrolled' || enrollment.seatCounted === true) {
+        return;
+      }
+
+      if (typeof enrollment.lessonId !== 'string' || enrollment.lessonId.length === 0) {
+        trx.set(
+          enrollmentRef,
+          {
+            status: 'cancelled',
+            reason: 'invalid_lesson_id',
+            updatedAt: FieldValue.serverTimestamp(),
+          },
+          { merge: true },
+        );
+        return;
+      }
+
+      const lessonRef = db.doc(`group_lessons/${enrollment.lessonId}`);
+      const lessonSnap = await trx.get(lessonRef);
+      if (!lessonSnap.exists) {
+        trx.set(
+          enrollmentRef,
+          {
+            status: 'cancelled',
+            reason: 'lesson_not_found',
+            updatedAt: FieldValue.serverTimestamp(),
+          },
+          { merge: true },
+        );
+        return;
+      }
+
+      const lessonStatus = (lessonSnap.get('status') as string | undefined) ?? 'scheduled';
+      const enrolledCount = (lessonSnap.get('enrolledCount') as number | undefined) ?? 0;
+      const capacity = (lessonSnap.get('capacity') as number | undefined) ?? 0;
+
+      if (lessonStatus !== 'scheduled') {
+        trx.set(
+          enrollmentRef,
+          {
+            status: 'cancelled',
+            reason: 'lesson_not_open',
+            updatedAt: FieldValue.serverTimestamp(),
+          },
+          { merge: true },
+        );
+        return;
+      }
+
+      if (capacity <= 0 || enrolledCount >= capacity) {
+        trx.set(
+          enrollmentRef,
+          {
+            status: 'cancelled',
+            reason: 'capacity_full',
+            updatedAt: FieldValue.serverTimestamp(),
+          },
+          { merge: true },
+        );
+        return;
+      }
+
+      trx.set(
+        lessonRef,
+        {
+          enrolledCount: enrolledCount + 1,
+          updatedAt: FieldValue.serverTimestamp(),
+        },
+        { merge: true },
+      );
+
+      trx.set(
+        enrollmentRef,
+        {
+          seatCounted: true,
+          seatReleased: false,
+          updatedAt: FieldValue.serverTimestamp(),
+        },
+        { merge: true },
+      );
+    });
+  },
+);
+
+export const groupEnrollmentCancelledHook = onDocumentUpdated(
+  'group_enrollments/{enrollmentId}',
+  async (event) => {
+    const before = event.data?.before.data() as { status?: string } | undefined;
+    const after = event.data?.after.data() as {
+      status?: string;
+      lessonId?: string;
+      seatReleased?: boolean;
+    } | undefined;
+
+    if (!before || !after) {
+      return;
+    }
+
+    if (before.status !== 'enrolled' || after.status !== 'cancelled') {
+      return;
+    }
+
+    if (typeof after.lessonId !== 'string' || after.lessonId.length === 0) {
+      return;
+    }
+
+    const db = getFirestore();
+    const enrollmentRef = db.doc(`group_enrollments/${event.params.enrollmentId}`);
+    const lessonRef = db.doc(`group_lessons/${after.lessonId}`);
+
+    await db.runTransaction(async (trx) => {
+      const currentEnrollment = await trx.get(enrollmentRef);
+      if (!currentEnrollment.exists) {
+        return;
+      }
+
+      const currentEnrollmentData = currentEnrollment.data() as {
+        seatReleased?: boolean;
+      };
+      if (currentEnrollmentData.seatReleased === true) {
+        return;
+      }
+
+      const lessonSnap = await trx.get(lessonRef);
+      if (lessonSnap.exists) {
+        const currentCount = (lessonSnap.get('enrolledCount') as number | undefined) ?? 0;
+        trx.set(
+          lessonRef,
+          {
+            enrolledCount: Math.max(0, currentCount - 1),
+            updatedAt: FieldValue.serverTimestamp(),
+          },
+          { merge: true },
+        );
+      }
+
+      trx.set(
+        enrollmentRef,
+        {
+          seatReleased: true,
+          seatCounted: false,
+          updatedAt: FieldValue.serverTimestamp(),
+        },
+        { merge: true },
+      );
+    });
+  },
+);

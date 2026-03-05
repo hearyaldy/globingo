@@ -159,16 +159,31 @@ class TeachingDashboardScreen extends StatelessWidget {
                         ),
                       ),
                       const SizedBox(height: 12),
-                      OutlinedButton.icon(
-                        onPressed: () => context.go('/teacher-offers'),
-                        icon: const Icon(
-                          Icons.library_books_outlined,
-                          size: 16,
-                        ),
-                        label: Text(
-                          'Manage Lesson Offers',
-                          style: AppTypography.labelMedium,
-                        ),
+                      Wrap(
+                        spacing: 12,
+                        runSpacing: 12,
+                        children: [
+                          OutlinedButton.icon(
+                            onPressed: () => context.go('/teacher-offers'),
+                            icon: const Icon(
+                              Icons.library_books_outlined,
+                              size: 16,
+                            ),
+                            label: Text(
+                              'Manage Lesson Offers',
+                              style: AppTypography.labelMedium,
+                            ),
+                          ),
+                          OutlinedButton.icon(
+                            onPressed: () =>
+                                context.go('/group-lessons/manage'),
+                            icon: const Icon(Icons.groups_outlined, size: 16),
+                            label: Text(
+                              'Manage Group Lessons',
+                              style: AppTypography.labelMedium,
+                            ),
+                          ),
+                        ],
                       ),
                       const SizedBox(height: 24),
 

@@ -139,6 +139,24 @@ async function seedBaseDocs() {
       issuedAt: new Date('2026-03-05T00:00:00.000Z'),
       metadata: {},
     });
+
+    await setDoc(doc(db, 'group_lessons/group-full'), {
+      lessonId: 'group-full',
+      teacherId: 'teacher1',
+      teacherDocId: 'teacher1',
+      title: 'Full Group',
+      description: 'Already full',
+      language: 'English',
+      level: 'A2',
+      capacity: 1,
+      pricePerSeat: 15,
+      status: 'scheduled',
+      scheduledAt: new Date('2026-03-10T03:00:00.000Z'),
+      durationMinutes: 60,
+      enrolledCount: 1,
+      createdAt: new Date('2026-03-05T00:00:00.000Z'),
+      updatedAt: new Date('2026-03-05T00:00:00.000Z'),
+    });
   });
 }
 
@@ -415,6 +433,17 @@ async function run() {
       setDoc(doc(learnerDb, 'group_enrollments/group-1_learner1'), {
         enrollmentId: 'group-1_learner1',
         lessonId: 'group-1',
+        learnerId: 'learner1',
+        status: 'enrolled',
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      }),
+    );
+
+    await assertFails(
+      setDoc(doc(learnerDb, 'group_enrollments/group-full_learner1'), {
+        enrollmentId: 'group-full_learner1',
+        lessonId: 'group-full',
         learnerId: 'learner1',
         status: 'enrolled',
         createdAt: serverTimestamp(),

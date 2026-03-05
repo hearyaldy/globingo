@@ -297,10 +297,19 @@ service cloud.firestore {
       allow create: if (
           isSignedIn()
           && request.resource.data.enrollmentId == enrollmentId
+          && request.resource.data.keys().hasOnly([
+            "enrollmentId",
+            "lessonId",
+            "learnerId",
+            "status",
+            "createdAt",
+            "updatedAt"
+          ])
           && request.resource.data.learnerId == request.auth.uid
           && enrollmentId == (request.resource.data.lessonId + "_" + request.auth.uid)
           && groupLessonExists(request.resource.data.lessonId)
           && groupLessonDoc(request.resource.data.lessonId).data.status == "scheduled"
+          && groupLessonDoc(request.resource.data.lessonId).data.enrolledCount < groupLessonDoc(request.resource.data.lessonId).data.capacity
           && request.resource.data.status == "enrolled"
           && request.resource.data.createdAt == request.time
           && request.resource.data.updatedAt == request.time
