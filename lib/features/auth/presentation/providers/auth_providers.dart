@@ -76,6 +76,22 @@ final currentUserProfileProvider = StreamProvider<UserProfile?>((ref) {
   });
 });
 
+final isAdminUserProvider = StreamProvider<bool>((ref) {
+  final firebaseAuth = ref.watch(firebaseAuthProvider);
+
+  return firebaseAuth.idTokenChanges().asyncMap((user) async {
+    if (user == null) {
+      return false;
+    }
+    try {
+      final token = await user.getIdTokenResult();
+      return token.claims?['admin'] == true;
+    } catch (_) {
+      return false;
+    }
+  });
+});
+
 class AuthController {
   AuthController(this._repository);
 

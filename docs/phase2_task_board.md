@@ -556,3 +556,39 @@ This board translates Phase 2 proposal scope into executable tickets with depend
   - release notes/changelog
 - Acceptance criteria:
   - Phase 2 can be demoed end-to-end with production-like data and policy behavior.
+
+### P2-021 Admin Ops Console (MVP)
+- Status: `IN_PROGRESS`
+- Priority: `P1`
+- Depends on: `P2-003`, `P2-007`, `P2-008`, `P2-009`, `P2-010`
+- Scope:
+  - Add admin-only internal pages for:
+    - user/student/teacher management
+    - teacher quality/rating operations
+    - booking schedule oversight and forced cancellations
+    - review moderation actions
+  - Add claim-based admin route guard and navigation gating.
+- File targets:
+  - `lib/core/config/routes.dart`
+  - `lib/core/widgets/main_layout.dart`
+  - `lib/features/auth/presentation/providers/auth_providers.dart`
+  - `lib/features/admin/presentation/`
+- Acceptance criteria:
+  - Non-admin users cannot access `/admin*` routes.
+  - Admin users can reach users/teachers/reviews/bookings ops pages.
+  - Admin actions write audit metadata on affected documents.
+- Notes:
+  - Added admin routes:
+    - `/admin`
+    - `/admin/users`
+    - `/admin/teachers`
+    - `/admin/reviews`
+    - `/admin/bookings`
+  - Added `isAdminUserProvider` (custom claim `admin == true`) and route-level guard in router redirect.
+  - Added admin navigation visibility in main layout (desktop and mobile).
+  - Added admin MVP screens with management actions:
+    - `AdminDashboardScreen`
+    - `AdminUsersScreen`
+    - `AdminTeachersScreen`
+    - `AdminReviewsScreen`
+    - `AdminBookingsScreen`

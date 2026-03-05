@@ -21,6 +21,7 @@ class MainLayout extends ConsumerWidget {
     final isMobile = Responsive.isMobile(context);
     final currentMode = ref.watch(modeProvider);
     final userProfile = ref.watch(currentUserProfileProvider).valueOrNull;
+    final isAdmin = ref.watch(isAdminUserProvider).valueOrNull ?? false;
     final canTeach = userProfile?.teachingModeEnabled ?? false;
     final homePath = currentMode == AppMode.teaching ? '/dashboard' : '/';
     final user = FirebaseAuth.instance.currentUser;
@@ -41,6 +42,7 @@ class MainLayout extends ConsumerWidget {
               userEmail,
               currentMode,
               canTeach,
+              isAdmin,
             )
           : null,
       body: Column(
@@ -52,6 +54,7 @@ class MainLayout extends ConsumerWidget {
               currentPath,
               currentMode,
               canTeach,
+              isAdmin,
             ),
           Expanded(
             child: isMobile
@@ -139,6 +142,7 @@ class MainLayout extends ConsumerWidget {
     String userEmail,
     AppMode currentMode,
     bool canTeach,
+    bool isAdmin,
   ) {
     return Drawer(
       child: SafeArea(
@@ -276,6 +280,16 @@ class MainLayout extends ConsumerWidget {
                 context.go('/settings');
               },
             ),
+            if (isAdmin)
+              _DrawerLink(
+                icon: Icons.admin_panel_settings_outlined,
+                label: 'Admin',
+                isActive: currentPath.startsWith('/admin'),
+                onTap: () {
+                  Navigator.pop(context);
+                  context.go('/admin');
+                },
+              ),
 
             const Spacer(),
 
@@ -307,6 +321,7 @@ class MainLayout extends ConsumerWidget {
     String currentPath,
     AppMode currentMode,
     bool canTeach,
+    bool isAdmin,
   ) {
     return Container(
       height: 70,
@@ -394,6 +409,12 @@ class MainLayout extends ConsumerWidget {
               onTap: () => context.go('/wallet'),
             ),
           ],
+          if (isAdmin)
+            _NavLink(
+              label: 'Admin',
+              isActive: currentPath.startsWith('/admin'),
+              onTap: () => context.go('/admin'),
+            ),
           const Spacer(),
           // Mode Toggle
           const ModeToggle(),

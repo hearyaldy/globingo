@@ -17,6 +17,11 @@ import '../../features/settings/presentation/screens/settings_screen.dart';
 import '../../features/wallet/presentation/screens/wallet_screen.dart';
 import '../../features/booking/presentation/screens/booking_screen.dart';
 import '../../features/group_lessons/presentation/screens/group_lessons_manage_screen.dart';
+import '../../features/admin/presentation/screens/admin_dashboard_screen.dart';
+import '../../features/admin/presentation/screens/admin_users_screen.dart';
+import '../../features/admin/presentation/screens/admin_teachers_screen.dart';
+import '../../features/admin/presentation/screens/admin_reviews_screen.dart';
+import '../../features/admin/presentation/screens/admin_bookings_screen.dart';
 import '../../features/auth/presentation/screens/login_screen.dart';
 import '../../features/auth/presentation/screens/register_screen.dart';
 import '../../features/auth/presentation/screens/forgot_password_screen.dart';
@@ -33,6 +38,11 @@ class AppRoutes {
   static const String lessonRoom = '/lesson/:bookingId';
   static const String booking = '/booking/:teacherId';
   static const String groupLessonsManage = '/group-lessons/manage';
+  static const String admin = '/admin';
+  static const String adminUsers = '/admin/users';
+  static const String adminTeachers = '/admin/teachers';
+  static const String adminReviews = '/admin/reviews';
+  static const String adminBookings = '/admin/bookings';
   static const String review = '/review/:lessonId';
   static const String settings = '/settings';
   static const String wallet = '/wallet';
@@ -95,7 +105,7 @@ GoRouter _buildRouter() {
           hasCompletedOnboarding = false;
         }
 
-        return resolveRouteRedirect(
+        final baseRedirect = resolveRouteRedirect(
           RouteGuardContext(
             isLoggedIn: true,
             hasCompletedOnboarding: hasCompletedOnboarding,
@@ -106,6 +116,24 @@ GoRouter _buildRouter() {
             loginPath: AppRoutes.login,
           ),
         );
+
+        if (baseRedirect != null) {
+          return baseRedirect;
+        }
+
+        if (path.startsWith(AppRoutes.admin)) {
+          try {
+            final token = await currentUser.getIdTokenResult();
+            final isAdmin = token.claims?['admin'] == true;
+            if (!isAdmin) {
+              return AppRoutes.home;
+            }
+          } catch (_) {
+            return AppRoutes.home;
+          }
+        }
+
+        return null;
       }
       return null;
     },
@@ -202,6 +230,31 @@ GoRouter _buildRouter() {
             path: AppRoutes.groupLessonsManage,
             pageBuilder: (context, state) =>
                 const NoTransitionPage(child: GroupLessonsManageScreen()),
+          ),
+          GoRoute(
+            path: AppRoutes.admin,
+            pageBuilder: (context, state) =>
+                const NoTransitionPage(child: AdminDashboardScreen()),
+          ),
+          GoRoute(
+            path: AppRoutes.adminUsers,
+            pageBuilder: (context, state) =>
+                const NoTransitionPage(child: AdminUsersScreen()),
+          ),
+          GoRoute(
+            path: AppRoutes.adminTeachers,
+            pageBuilder: (context, state) =>
+                const NoTransitionPage(child: AdminTeachersScreen()),
+          ),
+          GoRoute(
+            path: AppRoutes.adminReviews,
+            pageBuilder: (context, state) =>
+                const NoTransitionPage(child: AdminReviewsScreen()),
+          ),
+          GoRoute(
+            path: AppRoutes.adminBookings,
+            pageBuilder: (context, state) =>
+                const NoTransitionPage(child: AdminBookingsScreen()),
           ),
           GoRoute(
             path: AppRoutes.review,
