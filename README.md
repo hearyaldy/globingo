@@ -50,7 +50,7 @@ No formal credentials required. Reputation is built through transaction-validate
 - [x] Notification settings persistence
 - [ ] Payment integration (Stripe) - deferred to Phase 1.5
 
-## Current Phase 1 Progress (Updated: March 4, 2026)
+## Current Phase 1 Progress (Updated: March 5, 2026)
 
 ### Implemented
 - Firebase Auth + Firebase Firestore integration
@@ -80,6 +80,39 @@ No formal credentials required. Reputation is built through transaction-validate
 - Real-time video/call provider integration (Agora/Zoom/WebRTC)
 - Persistent lesson notes/chat backend
 - Admin UI screens (rules support prepared, UI not complete)
+
+## Phase 1 Closure TODO (Updated: March 5, 2026)
+
+### Verified Today
+- [x] `flutter analyze` clean (March 5, 2026)
+- [x] `flutter test` passing (March 5, 2026)
+- [x] Firestore rules emulator test harness added (`tests/firestore.rules.test.js`, `npm run rules:test`)
+- [x] `npm run rules:test` passed in Firestore Emulator (March 5, 2026)
+- [x] Typed repository scaffolding added for `users`, `teachers`, `bookings`, `reviews`; booking creation moved into repository.
+- [x] `MyCourses` and `LeaveReview` flows migrated to repository-backed Firestore access.
+- [x] `TeachingDashboard` booking decision path migrated to repository-backed reads/writes.
+- [x] `FindTeachers` and `TeacherProfile` migrated to repository-backed teacher/review/offer reads.
+- [x] `Settings` and `ModeToggle` now persist through `UserRepository`/`TeacherRepository`.
+- [x] `Login`, `Onboarding`, and `LearningDashboard` migrated to repository-backed access.
+- [x] `TeacherOffers` and `LessonRoom` migrated to repository-backed booking/offer actions.
+
+### Remaining to Close Phase 1
+- [ ] P1-001: Final Firebase bootstrap validation for required platforms (resolve iOS config decision for Phase 1 scope).
+- [x] P1-002: Add/complete automated tests for auth repository success + error paths.
+- [ ] P1-003: Complete runtime validation of auth screens against configured Firebase project.
+- [ ] P1-004: Complete runtime validation of route guards/session-aware redirects.
+- [ ] P1-005: Validate first-login profile bootstrap in live Firestore.
+- [x] P1-006: Finish migration to typed Firestore repositories and remove critical direct/mock data dependencies.
+- [ ] P1-007: Finalize booking persistence path and align legacy `docId` vs `uid` data shape.
+- [ ] P1-008: Complete end-to-end verification for teacher accept/reject reflected in learner views.
+- [ ] P1-009: Complete review/teacher metrics validation and optional denormalized aggregate decision.
+- [x] P1-015: Execute Firestore Emulator security-rules tests and confirm pass.
+- [ ] P1-018: Finish release Definition of Done checklist and mark Phase 1 tracker tickets as complete.
+
+Live validation script: `docs/phase1_e2e_demo_checklist.md`
+
+Phase 2 start decision: **GO (conditional)**  
+Manual live Firebase E2E validation for `P1-003/004/005/007/008/009` is pending and must be completed before formally marking Phase 1 as closed.
 
 ## Tech Stack
 
@@ -219,6 +252,10 @@ Detailed execution tracker: [Phase 1 Firebase Task Board](docs/phase1_firebase_t
 - Group lessons
 - Native push notifications
 - Advanced analytics for teachers
+
+Detailed execution tracker: [Phase 2 Task Board](docs/phase2_task_board.md)
+Scope lock: [Phase 2 Scope Lock](docs/phase2_scope_lock.md)
+Schema draft: [Phase 2 Firestore Schema v2](docs/phase2_firestore_schema_v2.md)
 
 ## API Documentation
 

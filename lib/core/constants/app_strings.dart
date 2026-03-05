@@ -10,6 +10,7 @@ class AppStrings {
   static const String findTeachers = 'Find Teachers';
   static const String dashboard = 'Dashboard';
   static const String myCourses = 'My Courses';
+  static const String wallet = 'Wallet';
   static const String settings = 'Settings';
 
   // Mode

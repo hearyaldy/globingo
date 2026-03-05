@@ -8,6 +8,8 @@ import '../../../../core/constants/app_colors.dart';
 import '../../../../core/constants/app_typography.dart';
 import '../../../../core/utils/responsive.dart';
 import '../../../mode_switch/presentation/providers/mode_provider.dart';
+import '../../../teachers/data/repositories/teacher_repository.dart';
+import '../../../users/data/repositories/user_repository.dart';
 
 enum _OnboardingRole { student, teacher, both }
 
@@ -21,6 +23,9 @@ class OnboardingScreen extends ConsumerStatefulWidget {
 }
 
 class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
+  final UserRepository _userRepository = UserRepository();
+  final TeacherRepository _teacherRepository = TeacherRepository();
+
   final _formKey = GlobalKey<FormState>();
   final _bioController = TextEditingController();
   final _hourlyRateController = TextEditingController(text: '25');
@@ -111,52 +116,46 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
         : (currentUser.email ?? 'User');
 
     try {
-      await FirebaseFirestore.instance
-          .collection('users')
-          .doc(currentUser.uid)
-          .set({
-            'uid': currentUser.uid,
-            'displayName': userName,
-            'email': currentUser.email,
-            'activeMode': isTeacherOnly ? 'teaching' : 'learning',
-            'learningModeEnabled': true,
-            'teachingModeEnabled': isTeacher,
-            'hasCompletedOnboarding': true,
-            'rolePreference': isBoth
-                ? 'both'
-                : (isTeacherOnly ? 'teacher' : 'student'),
-            'updatedAt': FieldValue.serverTimestamp(),
-          }, SetOptions(merge: true));
+      await _userRepository.upsertUser(currentUser.uid, {
+        'uid': currentUser.uid,
+        'displayName': userName,
+        'email': currentUser.email,
+        'activeMode': isTeacherOnly ? 'teaching' : 'learning',
+        'learningModeEnabled': true,
+        'teachingModeEnabled': isTeacher,
+        'hasCompletedOnboarding': true,
+        'rolePreference': isBoth
+            ? 'both'
+            : (isTeacherOnly ? 'teacher' : 'student'),
+        'updatedAt': FieldValue.serverTimestamp(),
+      });
 
       if (isTeacher) {
         final hourlyRate =
             double.tryParse(_hourlyRateController.text.trim()) ?? 25;
-        await FirebaseFirestore.instance
-            .collection('teachers')
-            .doc(currentUser.uid)
-            .set({
-              'uid': currentUser.uid,
-              'name': userName,
-              'bio': _bioController.text.trim(),
-              'teachingLanguages': _selectedLanguages.toList(),
-              'speakingLanguages': _selectedLanguages.toList(),
-              'hourlyRate': hourlyRate,
-              'rating': 0,
-              'reviewCount': 0,
-              'lessonCount': 0,
-              'studentCount': 0,
-              'skillRating': {
-                'clearExplanation': 0,
-                'patient': 0,
-                'wellPrepared': 0,
-                'helpful': 0,
-                'fun': 0,
-              },
-              'availableDays': ['Mon', 'Tue', 'Wed', 'Thu', 'Fri'],
-              'isActive': true,
-              'updatedAt': FieldValue.serverTimestamp(),
-              'createdAt': FieldValue.serverTimestamp(),
-            }, SetOptions(merge: true));
+        await _teacherRepository.upsertTeacherByUserId(currentUser.uid, {
+          'uid': currentUser.uid,
+          'name': userName,
+          'bio': _bioController.text.trim(),
+          'teachingLanguages': _selectedLanguages.toList(),
+          'speakingLanguages': _selectedLanguages.toList(),
+          'hourlyRate': hourlyRate,
+          'rating': 0,
+          'reviewCount': 0,
+          'lessonCount': 0,
+          'studentCount': 0,
+          'skillRating': {
+            'clearExplanation': 0,
+            'patient': 0,
+            'wellPrepared': 0,
+            'helpful': 0,
+            'fun': 0,
+          },
+          'availableDays': ['Mon', 'Tue', 'Wed', 'Thu', 'Fri'],
+          'isActive': true,
+          'updatedAt': FieldValue.serverTimestamp(),
+          'createdAt': FieldValue.serverTimestamp(),
+        });
         ref
             .read(modeProvider.notifier)
             .setMode(isTeacherOnly ? AppMode.teaching : AppMode.learning);

@@ -8,7 +8,9 @@ import '../../../../../core/constants/app_typography.dart';
 import '../../../../../core/utils/responsive.dart';
 import '../../../../../core/widgets/avatar_widget.dart';
 import '../../../../../core/widgets/rating_stars.dart';
+import '../../../../booking/data/repositories/booking_repository.dart';
 import '../../../../teachers/data/models/teacher_model.dart';
+import '../../../../teachers/data/repositories/teacher_repository.dart';
 
 class LearningDashboardScreen extends StatelessWidget {
   const LearningDashboardScreen({super.key});
@@ -63,6 +65,8 @@ class _UpcomingLessonsSection extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final teacherRepository = TeacherRepository();
+    final bookingRepository = BookingRepository();
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -112,9 +116,7 @@ class _UpcomingLessonsSection extends StatelessWidget {
           )
         else
           StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-            stream: FirebaseFirestore.instance
-                .collection('teachers')
-                .snapshots(),
+            stream: teacherRepository.watchTeachers(),
             builder: (context, teachersSnapshot) {
               if (teachersSnapshot.hasError) {
                 return const Text('Failed to load teachers.');
@@ -127,7 +129,8 @@ class _UpcomingLessonsSection extends StatelessWidget {
               for (final teacherDoc in teachersSnapshot.data!.docs) {
                 final data = teacherDoc.data();
                 final uid = (data['uid'] as String?)?.trim() ?? '';
-                final isActive = data['isActive'] == true;
+                final isActive =
+                    data['isActive'] == true || data['active'] == true;
                 if (uid.isEmpty || !isActive) continue;
                 final name = (data['name'] as String?)?.trim();
                 if (name != null && name.isNotEmpty) {
@@ -137,10 +140,7 @@ class _UpcomingLessonsSection extends StatelessWidget {
               }
 
               return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-                stream: FirebaseFirestore.instance
-                    .collection('bookings')
-                    .where('learnerId', isEqualTo: userId)
-                    .snapshots(),
+                stream: bookingRepository.watchLearnerBookings(userId!),
                 builder: (context, snapshot) {
                   if (snapshot.hasError) {
                     return const Text('Failed to load upcoming lessons.');
@@ -158,8 +158,9 @@ class _UpcomingLessonsSection extends StatelessWidget {
                         if (status != 'pending' && status != 'accepted') {
                           return false;
                         }
-                        final teacherId = (data['teacherId'] as String?) ?? '';
-                        if (!activeTeacherNames.containsKey(teacherId)) {
+                        final teacherKey = _bookingTeacherLookupKey(data);
+                        if (teacherKey == null ||
+                            !activeTeacherNames.containsKey(teacherKey)) {
                           return false;
                         }
                         final scheduledAt = (data['scheduledAt'] as Timestamp?)
@@ -194,10 +195,12 @@ class _UpcomingLessonsSection extends StatelessWidget {
                     final time = scheduledAt == null
                         ? '--:--'
                         : '${scheduledAt.hour.toString().padLeft(2, '0')}:${scheduledAt.minute.toString().padLeft(2, '0')}';
-                    final teacherId = (lesson['teacherId'] as String?) ?? '';
+                    final teacherLookupKey = _bookingTeacherLookupKey(lesson);
                     return _UpcomingLessonCard(
                       teacherName:
-                          activeTeacherNames[teacherId] ??
+                          (teacherLookupKey == null
+                              ? null
+                              : activeTeacherNames[teacherLookupKey]) ??
                           (lesson['teacherName'] as String?) ??
                           'Teacher',
                       language: (lesson['language'] as String?) ?? 'Language',
@@ -235,6 +238,18 @@ class _UpcomingLessonsSection extends StatelessWidget {
       ],
     );
   }
+
+  String? _bookingTeacherLookupKey(Map<String, dynamic> bookingData) {
+    final teacherDocId = (bookingData['teacherDocId'] as String?)?.trim();
+    if (teacherDocId != null && teacherDocId.isNotEmpty) {
+      return teacherDocId;
+    }
+    final teacherId = (bookingData['teacherId'] as String?)?.trim();
+    if (teacherId != null && teacherId.isNotEmpty) {
+      return teacherId;
+    }
+    return null;
+  }
 }
 
 class _RecentTeachersSection extends StatelessWidget {
@@ -244,6 +259,7 @@ class _RecentTeachersSection extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final teacherRepository = TeacherRepository();
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -253,11 +269,7 @@ class _RecentTeachersSection extends StatelessWidget {
         ),
         const SizedBox(height: 16),
         StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-          stream: FirebaseFirestore.instance
-              .collection('teachers')
-              .where('isActive', isEqualTo: true)
-              .limit(10)
-              .snapshots(),
+          stream: teacherRepository.watchTeachers(),
           builder: (context, snapshot) {
             if (snapshot.hasError) {
               return const Text('Failed to load teachers.');
@@ -269,7 +281,10 @@ class _RecentTeachersSection extends StatelessWidget {
             final teachers = snapshot.data!.docs
                 .where((doc) {
                   final uid = (doc.data()['uid'] as String?)?.trim() ?? '';
-                  return uid.isNotEmpty;
+                  final isActive =
+                      doc.data()['isActive'] == true ||
+                      doc.data()['active'] == true;
+                  return uid.isNotEmpty && isActive;
                 })
                 .map((doc) => Teacher.fromFirestore(doc.id, doc.data()))
                 .take(3)

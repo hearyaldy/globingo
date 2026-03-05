@@ -1,0 +1,13 @@
+{
+  "name": "globingo-firestore-rules-tests",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "rules:test": "firebase emulators:exec --only firestore \"node tests/firestore.rules.test.js\"",
+    "rules:test:local": "node tests/firestore.rules.test.js"
+  },
+  "devDependencies": {
+    "@firebase/rules-unit-testing": "^4.0.1",
+    "firebase": "^11.0.0"
+  }
+}

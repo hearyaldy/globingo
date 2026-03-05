@@ -8,6 +8,7 @@ import '../../../../core/constants/app_strings.dart';
 import '../../../../core/constants/app_typography.dart';
 import '../../../../core/utils/responsive.dart';
 import '../../../auth/presentation/providers/auth_providers.dart';
+import '../../../users/data/repositories/user_repository.dart';
 import '../providers/mode_provider.dart';
 
 class ModeToggle extends ConsumerWidget {
@@ -75,10 +76,10 @@ class ModeToggle extends ConsumerWidget {
     ref.read(modeProvider.notifier).setMode(mode);
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) return;
-    await FirebaseFirestore.instance.collection('users').doc(user.uid).set({
+    await UserRepository().upsertUser(user.uid, {
       'activeMode': mode == AppMode.teaching ? 'teaching' : 'learning',
       'updatedAt': FieldValue.serverTimestamp(),
-    }, SetOptions(merge: true));
+    });
     if (!context.mounted) return;
     context.go(mode == AppMode.teaching ? '/dashboard' : '/');
   }

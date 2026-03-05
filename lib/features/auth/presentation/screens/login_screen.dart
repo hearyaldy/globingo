@@ -1,11 +1,11 @@
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../../core/constants/app_colors.dart';
 import '../../../../core/constants/app_typography.dart';
+import '../../../users/data/repositories/user_repository.dart';
 import '../providers/auth_providers.dart';
 
 class LoginScreen extends ConsumerStatefulWidget {
@@ -44,10 +44,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
       bool hasCompletedOnboarding = false;
       if (currentUser != null) {
         try {
-          final profile = await FirebaseFirestore.instance
-              .collection('users')
-              .doc(currentUser.uid)
-              .get();
+          final profile = await UserRepository().getUser(currentUser.uid);
           hasCompletedOnboarding =
               (profile.data()?['hasCompletedOnboarding'] as bool?) ?? false;
         } catch (_) {

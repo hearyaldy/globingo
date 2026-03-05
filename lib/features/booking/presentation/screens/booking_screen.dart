@@ -8,7 +8,9 @@ import '../../../../core/constants/app_typography.dart';
 import '../../../../core/utils/responsive.dart';
 import '../../../../core/widgets/async_state_widgets.dart';
 import '../../../../core/widgets/avatar_widget.dart';
+import '../../data/repositories/booking_repository.dart';
 import '../../../teachers/data/models/teacher_model.dart';
+import '../../../teachers/data/repositories/teacher_repository.dart';
 
 class BookingScreen extends StatefulWidget {
   final String teacherId;
@@ -20,6 +22,9 @@ class BookingScreen extends StatefulWidget {
 }
 
 class _BookingScreenState extends State<BookingScreen> {
+  final TeacherRepository _teacherRepository = TeacherRepository();
+  final BookingRepository _bookingRepository = BookingRepository();
+
   DateTime _selectedDate = DateTime.now().add(const Duration(days: 1));
   String? _selectedTime;
   int _selectedDuration = 60;
@@ -80,10 +85,7 @@ class _BookingScreenState extends State<BookingScreen> {
         }
 
         return StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
-          stream: FirebaseFirestore.instance
-              .collection('teachers')
-              .doc(resolvedTeacherDocId)
-              .snapshots(),
+          stream: _teacherRepository.watchTeacherDoc(resolvedTeacherDocId),
           builder: (context, snapshot) {
             if (snapshot.hasError) {
               return const AppErrorState(message: 'Failed to load teacher.');
@@ -125,7 +127,13 @@ class _BookingScreenState extends State<BookingScreen> {
                   Row(
                     children: [
                       IconButton(
-                        onPressed: () => context.pop(),
+                        onPressed: () {
+                          if (context.canPop()) {
+                            context.pop();
+                            return;
+                          }
+                          context.go('/find-teachers');
+                        },
                         icon: const Icon(Icons.arrow_back),
                       ),
                       const SizedBox(width: 8),
@@ -193,18 +201,7 @@ class _BookingScreenState extends State<BookingScreen> {
   }
 
   Future<String?> _resolveTeacherDocId() async {
-    final teachers = FirebaseFirestore.instance.collection('teachers');
-    final doc = await teachers.doc(widget.teacherId).get();
-    if (doc.exists) return doc.id;
-
-    final byUid = await teachers
-        .where('uid', isEqualTo: widget.teacherId)
-        .limit(1)
-        .get();
-    if (byUid.docs.isNotEmpty) {
-      return byUid.docs.first.id;
-    }
-    return null;
+    return _teacherRepository.resolveTeacherDocId(widget.teacherId);
   }
 
   Widget _buildTeacherSummary(Teacher teacher) {
@@ -329,20 +326,11 @@ class _BookingScreenState extends State<BookingScreen> {
   }
 
   Widget _buildLessonOfferSelector(Teacher teacher) {
-    final teacherRefs = <String>{teacher.uid, teacher.id}
-      ..removeWhere((value) => value.trim().isEmpty);
-    final offerStream = teacherRefs.length == 1
-        ? FirebaseFirestore.instance
-              .collection('lesson_offers')
-              .where('teacherId', isEqualTo: teacherRefs.first)
-              .snapshots()
-        : FirebaseFirestore.instance
-              .collection('lesson_offers')
-              .where('teacherId', whereIn: teacherRefs.toList())
-              .snapshots();
-
     return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-      stream: offerStream,
+      stream: _teacherRepository.watchLessonOffers(
+        teacherUid: teacher.uid,
+        teacherDocId: teacher.id,
+      ),
       builder: (context, snapshot) {
         if (snapshot.hasError) {
           return Text(
@@ -631,18 +619,10 @@ class _BookingScreenState extends State<BookingScreen> {
   Stream<QuerySnapshot<Map<String, dynamic>>> _teacherBookingsStream(
     Teacher teacher,
   ) {
-    final teacherRefs = <String>{teacher.uid, teacher.id}
-      ..removeWhere((value) => value.trim().isEmpty);
-    if (teacherRefs.length == 1) {
-      return FirebaseFirestore.instance
-          .collection('bookings')
-          .where('teacherId', isEqualTo: teacherRefs.first)
-          .snapshots();
-    }
-    return FirebaseFirestore.instance
-        .collection('bookings')
-        .where('teacherId', whereIn: teacherRefs.toList())
-        .snapshots();
+    return _bookingRepository.watchTeacherBookings(
+      teacherUid: teacher.uid,
+      teacherDocId: teacher.id,
+    );
   }
 
   DateTime _timeToDateTime(DateTime date, String hhmm) {
@@ -774,6 +754,10 @@ class _BookingScreenState extends State<BookingScreen> {
     );
   }
 
+  String _resolvePaymentRoute() {
+    return 'organization_escrow';
+  }
+
   Widget _buildOrderSummary(Teacher teacher, bool isMobile, double totalPrice) {
     return Container(
       padding: const EdgeInsets.all(24),
@@ -853,25 +837,11 @@ class _BookingScreenState extends State<BookingScreen> {
 
   Future<void> _confirmBooking() async {
     final currentUser = FirebaseAuth.instance.currentUser;
-    final resolvedTeacherDocId = await _resolveTeacherDocId();
     if (!mounted) return;
-    if (resolvedTeacherDocId == null) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('Teacher not found.')));
-      return;
-    }
-    final teacherSnapshot = await FirebaseFirestore.instance
-        .collection('teachers')
-        .doc(resolvedTeacherDocId)
-        .get();
+    final currentTeacher = await _teacherRepository.getTeacherByIdOrUid(
+      widget.teacherId,
+    );
     if (!mounted) return;
-    final currentTeacher = teacherSnapshot.exists
-        ? Teacher.fromFirestore(
-            teacherSnapshot.id,
-            teacherSnapshot.data() ?? const {},
-          )
-        : null;
     final selectedTime = _selectedTime;
 
     if (currentUser == null || currentTeacher == null || selectedTime == null) {
@@ -897,8 +867,10 @@ class _BookingScreenState extends State<BookingScreen> {
     final lessonFee = _totalPrice(currentTeacher);
     final platformFee = lessonFee * 0.1;
     final totalAmount = lessonFee + platformFee;
-    final slotId =
-        '${currentTeacher.uid}_${scheduledAt.millisecondsSinceEpoch}';
+    final slotId = _bookingRepository.buildSlotId(
+      teacherUid: currentTeacher.uid,
+      scheduledAt: scheduledAt,
+    );
 
     final currentDayName = _weekdayShortNames[_selectedDate.weekday - 1];
     if (!currentTeacher.availableDays.contains(currentDayName)) {
@@ -910,32 +882,12 @@ class _BookingScreenState extends State<BookingScreen> {
       return;
     }
 
-    final existingBookings = await _teacherBookingsStream(currentTeacher).first;
-    final hasConflict = existingBookings.docs
-        .map((doc) => doc.data())
-        .where((data) {
-          final status = (data['status'] as String?) ?? '';
-          return status == 'pending' ||
-              status == 'accepted' ||
-              status == 'in_progress';
-        })
-        .any((data) {
-          final bookedAt = (data['scheduledAt'] as Timestamp?)?.toDate();
-          if (bookedAt == null) return false;
-          if (bookedAt.year != scheduledAt.year ||
-              bookedAt.month != scheduledAt.month ||
-              bookedAt.day != scheduledAt.day) {
-            return false;
-          }
-          final bookedDuration =
-              (data['durationMinutes'] as num?)?.toInt() ?? 60;
-          final bookedEnd = bookedAt.add(Duration(minutes: bookedDuration));
-          final requestedEnd = scheduledAt.add(
-            Duration(minutes: _selectedDuration),
-          );
-          return scheduledAt.isBefore(bookedEnd) &&
-              requestedEnd.isAfter(bookedAt);
-        });
+    final hasConflict = await _bookingRepository.hasTeacherConflict(
+      teacherUid: currentTeacher.uid,
+      teacherDocId: currentTeacher.id,
+      scheduledAt: scheduledAt,
+      durationMinutes: _selectedDuration,
+    );
     if (hasConflict) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -948,41 +900,31 @@ class _BookingScreenState extends State<BookingScreen> {
 
     setState(() => _isSubmittingBooking = true);
     try {
-      final bookingRef = FirebaseFirestore.instance
-          .collection('bookings')
-          .doc(slotId);
-      await FirebaseFirestore.instance.runTransaction((tx) async {
-        final existing = await tx.get(bookingRef);
-        if (existing.exists) {
-          throw Exception('conflict');
-        }
-        tx.set(bookingRef, {
-          'slotId': slotId,
-          'learnerId': currentUser.uid,
-          'learnerName':
+      await _bookingRepository.createPendingBooking(
+        BookingCreateRequest(
+          slotId: slotId,
+          learnerId: currentUser.uid,
+          learnerName:
               currentUser.displayName ?? currentUser.email ?? 'Learner',
-          'teacherId': currentTeacher.uid,
-          'teacherDocId': currentTeacher.id,
-          'teacherName': currentTeacher.name,
-          'offerId': _selectedOfferId,
-          'offerTitle': _selectedOfferTitle,
-          'language':
+          teacherId: currentTeacher.uid,
+          teacherDocId: currentTeacher.id,
+          teacherName: currentTeacher.name,
+          offerId: _selectedOfferId,
+          offerTitle: _selectedOfferTitle,
+          language:
               _selectedOfferLanguage ??
               (currentTeacher.teachingLanguages.isNotEmpty
                   ? currentTeacher.teachingLanguages.first
                   : 'Language'),
-          'scheduledAt': Timestamp.fromDate(scheduledAt),
-          'durationMinutes': _selectedOfferDuration ?? _selectedDuration,
-          'paymentMethod': _selectedPayment,
-          'status': 'pending',
-          'lessonFee': lessonFee,
-          'platformFee': platformFee,
-          'totalAmount': totalAmount,
-          'currency': 'USD',
-          'createdAt': FieldValue.serverTimestamp(),
-          'updatedAt': FieldValue.serverTimestamp(),
-        });
-      });
+          scheduledAt: scheduledAt,
+          durationMinutes: _selectedOfferDuration ?? _selectedDuration,
+          paymentMethod: _selectedPayment,
+          paymentRoute: _resolvePaymentRoute(),
+          lessonFee: lessonFee,
+          platformFee: platformFee,
+          totalAmount: totalAmount,
+        ),
+      );
     } catch (_) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(

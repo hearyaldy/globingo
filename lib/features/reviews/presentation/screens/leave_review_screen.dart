@@ -9,6 +9,8 @@ import '../../../../core/utils/responsive.dart';
 import '../../../../core/widgets/async_state_widgets.dart';
 import '../../../../core/widgets/skill_radar_chart.dart';
 import '../../../../core/widgets/avatar_widget.dart';
+import '../../../booking/data/repositories/booking_repository.dart';
+import '../../data/repositories/review_repository.dart';
 import '../../domain/review_eligibility.dart';
 
 class LeaveReviewScreen extends StatefulWidget {
@@ -21,6 +23,9 @@ class LeaveReviewScreen extends StatefulWidget {
 }
 
 class _LeaveReviewScreenState extends State<LeaveReviewScreen> {
+  final BookingRepository _bookingRepository = BookingRepository();
+  final ReviewRepository _reviewRepository = ReviewRepository();
+
   double _clearExplanation = 3.0;
   double _patient = 3.0;
   double _wellPrepared = 3.0;
@@ -58,14 +63,12 @@ class _LeaveReviewScreenState extends State<LeaveReviewScreen> {
     setState(() => _isSubmitting = true);
 
     try {
-      final existingReview = await FirebaseFirestore.instance
-          .collection('reviews')
-          .where('bookingId', isEqualTo: widget.lessonId)
-          .where('reviewerId', isEqualTo: currentUser.uid)
-          .limit(1)
-          .get();
+      final hasExistingReview = await _reviewRepository.hasReviewForBooking(
+        bookingId: widget.lessonId,
+        reviewerId: currentUser.uid,
+      );
 
-      if (existingReview.docs.isNotEmpty) {
+      if (hasExistingReview) {
         if (!mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('You already reviewed this lesson.')),
@@ -74,22 +77,20 @@ class _LeaveReviewScreenState extends State<LeaveReviewScreen> {
         return;
       }
 
-      await FirebaseFirestore.instance.collection('reviews').add({
-        'bookingId': widget.lessonId,
-        'reviewerId': currentUser.uid,
-        'reviewerName':
+      await _reviewRepository.createReview(
+        bookingId: widget.lessonId,
+        reviewerId: currentUser.uid,
+        reviewerName:
             currentUser.displayName ?? currentUser.email ?? 'Anonymous',
-        'teacherId': bookingData['teacherId'],
-        'teacherName': bookingData['teacherName'],
-        'clearExplanation': _clearExplanation,
-        'patient': _patient,
-        'wellPrepared': _wellPrepared,
-        'helpful': _helpful,
-        'fun': _fun,
-        'overall': _currentRating.average,
-        'createdAt': FieldValue.serverTimestamp(),
-        'updatedAt': FieldValue.serverTimestamp(),
-      });
+        teacherId: (bookingData['teacherId'] as String?) ?? '',
+        teacherName: (bookingData['teacherName'] as String?) ?? 'Teacher',
+        clearExplanation: _clearExplanation,
+        patient: _patient,
+        wellPrepared: _wellPrepared,
+        helpful: _helpful,
+        fun: _fun,
+        overall: _currentRating.average,
+      );
 
       if (!mounted) return;
       ScaffoldMessenger.of(
@@ -114,10 +115,7 @@ class _LeaveReviewScreenState extends State<LeaveReviewScreen> {
   Widget build(BuildContext context) {
     final isMobile = Responsive.isMobile(context);
     return StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
-      stream: FirebaseFirestore.instance
-          .collection('bookings')
-          .doc(widget.lessonId)
-          .snapshots(),
+      stream: _bookingRepository.watchBooking(widget.lessonId),
       builder: (context, snapshot) {
         if (snapshot.hasError) {
           return const AppErrorState(message: 'Failed to load lesson details.');

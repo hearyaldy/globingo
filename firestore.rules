@@ -10,7 +10,10 @@ service cloud.firestore {
     }
 
     function isAdmin() {
-      return isSignedIn() && request.auth.token.admin == true;
+      return isSignedIn()
+        && (request.auth.token is map)
+        && ("admin" in request.auth.token)
+        && request.auth.token.admin == true;
     }
 
     function bookingParticipant() {
@@ -31,7 +34,21 @@ service cloud.firestore {
 
     function canTeach(uid) {
       return exists(/databases/$(database)/documents/users/$(uid))
+        && ("teachingModeEnabled" in userDoc(uid).data)
         && (userDoc(uid).data.teachingModeEnabled == true);
+    }
+
+    function groupLessonDoc(lessonId) {
+      return get(/databases/$(database)/documents/group_lessons/$(lessonId));
+    }
+
+    function groupLessonExists(lessonId) {
+      return exists(/databases/$(database)/documents/group_lessons/$(lessonId));
+    }
+
+    function isGroupLessonTeacher(lessonId) {
+      return groupLessonExists(lessonId)
+        && groupLessonDoc(lessonId).data.teacherId == request.auth.uid;
     }
 
     match /users/{userId} {
@@ -74,8 +91,24 @@ service cloud.firestore {
         && request.resource.data.learnerId == resource.data.learnerId
         && request.resource.data.teacherId == resource.data.teacherId
         && request.resource.data.createdAt == resource.data.createdAt
-        && request.resource.data.diff(resource.data).changedKeys().hasOnly(["status", "updatedAt"])
+        && request.resource.data.diff(resource.data).changedKeys().hasOnly(["status", "updatedAt", "noShowActor", "cancelledBy", "cancellationReason"])
         && request.resource.data.updatedAt == request.time
+        && (
+          (
+            request.resource.data.status == "no_show"
+            && request.resource.data.noShowActor in ["learner", "teacher"]
+          )
+          || (
+            request.resource.data.status != "no_show"
+            && (
+              !("noShowActor" in request.resource.data)
+              || (
+                ("noShowActor" in resource.data)
+                && request.resource.data.noShowActor == resource.data.noShowActor
+              )
+            )
+          )
+        )
         && (
           (
             request.auth.uid == resource.data.teacherId
@@ -83,6 +116,17 @@ service cloud.firestore {
               (
                 resource.data.status == "pending"
                 && request.resource.data.status in ["accepted", "rejected"]
+              )
+              || (
+                resource.data.status == "accepted"
+                && request.resource.data.status == "cancelled"
+                && request.resource.data.cancelledBy == "teacher"
+                && request.resource.data.cancellationReason is string
+                && request.resource.data.cancellationReason.size() > 0
+              )
+              || (
+                resource.data.status == "in_progress"
+                && request.resource.data.status == "no_show"
               )
             )
           )
@@ -144,6 +188,181 @@ service cloud.firestore {
           isSignedIn()
           && resource.data.reviewerId == request.auth.uid
         ) || isAdmin();
+    }
+
+    match /wallets/{uid} {
+      allow read: if isOwner(uid) || isAdmin();
+      allow create, update, delete: if isAdmin();
+    }
+
+    match /wallet_transactions/{txId} {
+      allow read: if (
+          isSignedIn()
+          && resource.data.uid == request.auth.uid
+        ) || isAdmin();
+      allow create, update, delete: if isAdmin();
+    }
+
+    match /wallet_withdrawal_requests/{requestId} {
+      allow read: if (
+          isSignedIn()
+          && resource.data.uid == request.auth.uid
+        ) || isAdmin();
+
+      allow create: if (
+          isSignedIn()
+          && request.resource.data.uid == request.auth.uid
+          && request.resource.data.amount is number
+          && request.resource.data.amount > 0
+          && request.resource.data.status == "pending"
+          && request.resource.data.createdAt == request.time
+          && request.resource.data.updatedAt == request.time
+          && exists(/databases/$(database)/documents/wallets/$(request.auth.uid))
+          && get(/databases/$(database)/documents/wallets/$(request.auth.uid)).data.kycStatus == "verified"
+          && request.resource.data.amount >= get(/databases/$(database)/documents/wallets/$(request.auth.uid)).data.withdrawalThreshold
+          && request.resource.data.amount <= get(/databases/$(database)/documents/wallets/$(request.auth.uid)).data.availableBalance
+        ) || isAdmin();
+
+      allow update, delete: if isAdmin();
+    }
+
+    match /group_lessons/{lessonId} {
+      allow read: if true;
+
+      allow create: if (
+          isSignedIn()
+          && canTeach(request.auth.uid)
+          && request.resource.data.lessonId == lessonId
+          && request.resource.data.teacherId == request.auth.uid
+          && request.resource.data.teacherDocId is string
+          && exists(/databases/$(database)/documents/teachers/$(request.resource.data.teacherDocId))
+          && get(/databases/$(database)/documents/teachers/$(request.resource.data.teacherDocId)).data.uid == request.auth.uid
+          && request.resource.data.status == "scheduled"
+          && request.resource.data.enrolledCount == 0
+          && request.resource.data.createdAt == request.time
+          && request.resource.data.updatedAt == request.time
+        ) || isAdmin();
+
+      allow update: if (
+          isSignedIn()
+          && resource.data.teacherId == request.auth.uid
+          && canTeach(request.auth.uid)
+          && request.resource.data.lessonId == resource.data.lessonId
+          && request.resource.data.teacherId == resource.data.teacherId
+          && request.resource.data.teacherDocId == resource.data.teacherDocId
+          && request.resource.data.createdAt == resource.data.createdAt
+          && request.resource.data.enrolledCount == resource.data.enrolledCount
+          && request.resource.data.diff(resource.data).changedKeys().hasOnly([
+            "title",
+            "description",
+            "language",
+            "level",
+            "capacity",
+            "pricePerSeat",
+            "status",
+            "scheduledAt",
+            "durationMinutes",
+            "updatedAt"
+          ])
+          && request.resource.data.updatedAt == request.time
+          && (
+            request.resource.data.status == resource.data.status
+            || (
+              resource.data.status == "scheduled"
+              && request.resource.data.status in ["in_progress", "cancelled"]
+            )
+            || (
+              resource.data.status == "in_progress"
+              && request.resource.data.status == "completed"
+            )
+          )
+        ) || isAdmin();
+
+      allow delete: if (
+          isSignedIn()
+          && resource.data.teacherId == request.auth.uid
+          && resource.data.status == "scheduled"
+        ) || isAdmin();
+    }
+
+    match /group_enrollments/{enrollmentId} {
+      allow read: if (
+          isSignedIn()
+          && (
+            resource.data.learnerId == request.auth.uid
+            || isGroupLessonTeacher(resource.data.lessonId)
+          )
+        ) || isAdmin();
+
+      allow create: if (
+          isSignedIn()
+          && request.resource.data.enrollmentId == enrollmentId
+          && request.resource.data.learnerId == request.auth.uid
+          && enrollmentId == (request.resource.data.lessonId + "_" + request.auth.uid)
+          && groupLessonExists(request.resource.data.lessonId)
+          && groupLessonDoc(request.resource.data.lessonId).data.status == "scheduled"
+          && request.resource.data.status == "enrolled"
+          && request.resource.data.createdAt == request.time
+          && request.resource.data.updatedAt == request.time
+        ) || isAdmin();
+
+      allow update: if (
+          isSignedIn()
+          && request.resource.data.lessonId == resource.data.lessonId
+          && request.resource.data.learnerId == resource.data.learnerId
+          && request.resource.data.createdAt == resource.data.createdAt
+          && request.resource.data.diff(resource.data).changedKeys().hasOnly(["status", "updatedAt"])
+          && request.resource.data.updatedAt == request.time
+          && (
+            (
+              request.auth.uid == resource.data.learnerId
+              && resource.data.status == "enrolled"
+              && request.resource.data.status == "cancelled"
+            )
+            || (
+              isGroupLessonTeacher(resource.data.lessonId)
+              && resource.data.status == "enrolled"
+              && request.resource.data.status in ["attended", "no_show"]
+            )
+          )
+        ) || isAdmin();
+
+      allow delete: if isAdmin();
+    }
+
+    match /service_learning_hours/{recordId} {
+      allow read: if (
+          isSignedIn()
+          && resource.data.teacherId == request.auth.uid
+        ) || isAdmin();
+      allow create, update, delete: if isAdmin();
+    }
+
+    match /certificates/{certificateId} {
+      allow read: if (
+          isSignedIn()
+          && resource.data.uid == request.auth.uid
+        ) || isAdmin();
+      allow create, update, delete: if isAdmin();
+    }
+
+    match /no_show_events/{eventId} {
+      allow read: if (
+          isSignedIn()
+          && (
+            resource.data.teacherId == request.auth.uid
+            || resource.data.learnerId == request.auth.uid
+          )
+        ) || isAdmin();
+      allow create, update, delete: if isAdmin();
+    }
+
+    match /teacher_quality_events/{eventId} {
+      allow read: if (
+          isSignedIn()
+          && resource.data.teacherId == request.auth.uid
+        ) || isAdmin();
+      allow create, update, delete: if isAdmin();
     }
   }
 }

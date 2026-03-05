@@ -9,13 +9,19 @@ import '../../../../../core/utils/responsive.dart';
 import '../../../../../core/widgets/async_state_widgets.dart';
 import '../../../../../core/widgets/skill_radar_chart.dart';
 import '../../../../../core/widgets/avatar_widget.dart';
+import '../../../../booking/data/repositories/booking_repository.dart';
 import '../../../../booking/domain/booking_status_transition.dart';
+import '../../../../reviews/data/repositories/review_repository.dart';
+import '../../../../users/data/repositories/user_repository.dart';
 
 class TeachingDashboardScreen extends StatelessWidget {
   const TeachingDashboardScreen({super.key});
 
   @override
   Widget build(BuildContext context) {
+    final userRepository = UserRepository();
+    final bookingRepository = BookingRepository();
+    final reviewRepository = ReviewRepository();
     final isMobile = Responsive.isMobile(context);
     final padding = Responsive.screenPadding(context);
     final currentUser = FirebaseAuth.instance.currentUser;
@@ -27,10 +33,7 @@ class TeachingDashboardScreen extends StatelessWidget {
     }
 
     return StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
-      stream: FirebaseFirestore.instance
-          .collection('users')
-          .doc(currentUser.uid)
-          .snapshots(),
+      stream: userRepository.watchUser(currentUser.uid),
       builder: (context, userSnapshot) {
         if (userSnapshot.hasError) {
           return const AppErrorState(message: 'Failed to load user profile.');
@@ -78,10 +81,10 @@ class TeachingDashboardScreen extends StatelessWidget {
         }
 
         return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-          stream: FirebaseFirestore.instance
-              .collection('bookings')
-              .where('teacherId', isEqualTo: currentUser.uid)
-              .snapshots(),
+          stream: bookingRepository.watchTeacherBookings(
+            teacherUid: currentUser.uid,
+            teacherDocId: currentUser.uid,
+          ),
           builder: (context, snapshot) {
             if (snapshot.hasError) {
               return const AppErrorState(
@@ -101,15 +104,21 @@ class TeachingDashboardScreen extends StatelessWidget {
                     .map(_mapPendingBooking)
                     .toList()
                   ..sort((a, b) => a.scheduledAt.compareTo(b.scheduledAt));
+            final acceptedBookings =
+                allBookings
+                    .where(
+                      (doc) => (doc.data()['status'] as String?) == 'accepted',
+                    )
+                    .map(_mapAcceptedBooking)
+                    .toList()
+                  ..sort((a, b) => a.scheduledAt.compareTo(b.scheduledAt));
             final pendingCount = pendingBookings.length;
+            final acceptedCount = acceptedBookings.length;
             final totalStudents = _calculateTotalStudents(allBookings);
             final monthlyIncome = _calculateMonthlyIncome(allBookings);
 
             return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-              stream: FirebaseFirestore.instance
-                  .collection('reviews')
-                  .where('teacherId', isEqualTo: currentUser.uid)
-                  .snapshots(),
+              stream: reviewRepository.watchReviewsByTeacher(currentUser.uid),
               builder: (context, reviewsSnapshot) {
                 if (reviewsSnapshot.hasError) {
                   return const AppErrorState(
@@ -337,8 +346,51 @@ class TeachingDashboardScreen extends StatelessWidget {
                                     onUpdateStatus: (bookingId, status) =>
                                         _updateBookingStatus(
                                           context,
+                                          bookingRepository,
                                           bookingId,
                                           status,
+                                        ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            const SizedBox(height: 16),
+                            // Accepted Bookings
+                            Container(
+                              padding: const EdgeInsets.all(20),
+                              decoration: BoxDecoration(
+                                color: AppColors.surface,
+                                borderRadius: BorderRadius.circular(16),
+                                border: Border.all(
+                                  color: AppColors.borderLight,
+                                ),
+                              ),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Row(
+                                    children: [
+                                      Icon(
+                                        Icons.check_circle_outline,
+                                        color: AppColors.success,
+                                        size: 18,
+                                      ),
+                                      const SizedBox(width: 8),
+                                      Text(
+                                        'Accepted Bookings ($acceptedCount)',
+                                        style: AppTypography.labelLarge,
+                                      ),
+                                    ],
+                                  ),
+                                  const SizedBox(height: 16),
+                                  _AcceptedBookingsList(
+                                    bookings: acceptedBookings,
+                                    isMobile: true,
+                                    onCancelBooking: (bookingId) =>
+                                        _cancelAcceptedBooking(
+                                          context,
+                                          bookingRepository,
+                                          bookingId,
                                         ),
                                   ),
                                 ],
@@ -424,6 +476,7 @@ class TeachingDashboardScreen extends StatelessWidget {
                                       onUpdateStatus: (bookingId, status) =>
                                           _updateBookingStatus(
                                             context,
+                                            bookingRepository,
                                             bookingId,
                                             status,
                                           ),
@@ -434,6 +487,45 @@ class TeachingDashboardScreen extends StatelessWidget {
                             ),
                           ],
                         ),
+                      const SizedBox(height: 24),
+                      Container(
+                        padding: const EdgeInsets.all(24),
+                        decoration: BoxDecoration(
+                          color: AppColors.surface,
+                          borderRadius: BorderRadius.circular(16),
+                          border: Border.all(color: AppColors.borderLight),
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              children: [
+                                Icon(
+                                  Icons.check_circle_outline,
+                                  color: AppColors.success,
+                                  size: 20,
+                                ),
+                                const SizedBox(width: 8),
+                                Text(
+                                  'Accepted Bookings ($acceptedCount)',
+                                  style: AppTypography.h4,
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 16),
+                            _AcceptedBookingsList(
+                              bookings: acceptedBookings,
+                              isMobile: isMobile,
+                              onCancelBooking: (bookingId) =>
+                                  _cancelAcceptedBooking(
+                                    context,
+                                    bookingRepository,
+                                    bookingId,
+                                  ),
+                            ),
+                          ],
+                        ),
+                      ),
                     ],
                   ),
                 );
@@ -456,6 +548,21 @@ class TeachingDashboardScreen extends StatelessWidget {
       learnerName: (data['learnerName'] as String?) ?? 'Learner',
       scheduledAt: scheduledAt,
       durationMinutes: (data['durationMinutes'] as num?)?.toInt() ?? 60,
+    );
+  }
+
+  _AcceptedBooking _mapAcceptedBooking(
+    QueryDocumentSnapshot<Map<String, dynamic>> doc,
+  ) {
+    final data = doc.data();
+    final scheduledAt =
+        (data['scheduledAt'] as Timestamp?)?.toDate() ?? DateTime.now();
+    return _AcceptedBooking(
+      id: doc.id,
+      learnerName: (data['learnerName'] as String?) ?? 'Learner',
+      scheduledAt: scheduledAt,
+      durationMinutes: (data['durationMinutes'] as num?)?.toInt() ?? 60,
+      language: (data['language'] as String?) ?? 'Language',
     );
   }
 
@@ -496,24 +603,95 @@ class TeachingDashboardScreen extends StatelessWidget {
 
   Future<void> _updateBookingStatus(
     BuildContext context,
+    BookingRepository bookingRepository,
     String bookingId,
     String status,
   ) async {
     if (!isValidTeacherDecisionStatus(status)) return;
     try {
-      await FirebaseFirestore.instance
-          .collection('bookings')
-          .doc(bookingId)
-          .update({
-            'status': status,
-            'updatedAt': FieldValue.serverTimestamp(),
-          });
+      await bookingRepository.updateBookingStatus(
+        bookingId: bookingId,
+        status: status,
+      );
     } catch (_) {
       if (!context.mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Failed to update booking status.')),
       );
     }
+  }
+
+  Future<void> _cancelAcceptedBooking(
+    BuildContext context,
+    BookingRepository bookingRepository,
+    String bookingId,
+  ) async {
+    final reason = await _promptCancellationReason(context);
+    if (reason == null) return;
+
+    try {
+      await bookingRepository.updateBookingStatus(
+        bookingId: bookingId,
+        status: 'cancelled',
+        cancellationReason: reason,
+        cancelledBy: 'teacher',
+      );
+    } catch (_) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Failed to cancel booking.')),
+      );
+    }
+  }
+
+  Future<String?> _promptCancellationReason(BuildContext context) async {
+    final controller = TextEditingController();
+    String? result;
+    String? errorText;
+
+    await showDialog<void>(
+      context: context,
+      builder: (dialogContext) {
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            return AlertDialog(
+              title: const Text('Cancel booking'),
+              content: TextField(
+                controller: controller,
+                maxLength: 180,
+                decoration: InputDecoration(
+                  hintText: 'Reason for cancellation',
+                  errorText: errorText,
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.of(dialogContext).pop(),
+                  child: const Text('Keep'),
+                ),
+                ElevatedButton(
+                  onPressed: () {
+                    final value = controller.text.trim();
+                    if (value.isEmpty) {
+                      setDialogState(() {
+                        errorText = 'Reason is required';
+                      });
+                      return;
+                    }
+                    result = value;
+                    Navigator.of(dialogContext).pop();
+                  },
+                  child: const Text('Cancel Booking'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+
+    controller.dispose();
+    return result;
   }
 
   _ReviewMetrics _aggregateReviewMetrics(
@@ -846,4 +1024,125 @@ class _ReviewMetrics {
     required this.averageRating,
     required this.skillRating,
   });
+}
+
+class _AcceptedBookingItem extends StatelessWidget {
+  final _AcceptedBooking booking;
+  final bool isMobile;
+  final Future<void> Function() onCancelBooking;
+
+  const _AcceptedBookingItem({
+    required this.booking,
+    required this.onCancelBooking,
+    this.isMobile = false,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      padding: EdgeInsets.all(isMobile ? 12 : 16),
+      decoration: BoxDecoration(
+        color: AppColors.background,
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Row(
+        children: [
+          AvatarWidget(name: booking.learnerName, size: isMobile ? 36 : 40),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(booking.learnerName, style: AppTypography.labelLarge),
+                const SizedBox(height: 2),
+                Text(
+                  '${booking.language} • ${booking.displayText}',
+                  style: AppTypography.bodySmall,
+                ),
+              ],
+            ),
+          ),
+          OutlinedButton(
+            onPressed: () => context.go('/lesson/${booking.id}'),
+            style: OutlinedButton.styleFrom(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              minimumSize: Size.zero,
+            ),
+            child: Text('Open', style: AppTypography.labelMedium),
+          ),
+          const SizedBox(width: 8),
+          TextButton(
+            onPressed: onCancelBooking,
+            style: TextButton.styleFrom(
+              foregroundColor: AppColors.error,
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+              minimumSize: Size.zero,
+            ),
+            child: Text('Cancel', style: AppTypography.labelMedium),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _AcceptedBookingsList extends StatelessWidget {
+  final List<_AcceptedBooking> bookings;
+  final bool isMobile;
+  final Future<void> Function(String bookingId) onCancelBooking;
+
+  const _AcceptedBookingsList({
+    required this.bookings,
+    required this.onCancelBooking,
+    this.isMobile = false,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    if (bookings.isEmpty) {
+      return Text(
+        'No accepted bookings yet.',
+        style: AppTypography.bodyMedium.copyWith(
+          color: AppColors.textSecondary,
+        ),
+      );
+    }
+
+    return Column(
+      children: bookings
+          .map(
+            (booking) => _AcceptedBookingItem(
+              booking: booking,
+              isMobile: isMobile,
+              onCancelBooking: () => onCancelBooking(booking.id),
+            ),
+          )
+          .toList(),
+    );
+  }
+}
+
+class _AcceptedBooking {
+  final String id;
+  final String learnerName;
+  final DateTime scheduledAt;
+  final int durationMinutes;
+  final String language;
+
+  const _AcceptedBooking({
+    required this.id,
+    required this.learnerName,
+    required this.scheduledAt,
+    required this.durationMinutes,
+    required this.language,
+  });
+
+  String get displayText {
+    final date =
+        '${scheduledAt.year}-${scheduledAt.month.toString().padLeft(2, '0')}-${scheduledAt.day.toString().padLeft(2, '0')}';
+    final time =
+        '${scheduledAt.hour.toString().padLeft(2, '0')}:${scheduledAt.minute.toString().padLeft(2, '0')}';
+    return '$date · $time · $durationMinutes min';
+  }
 }

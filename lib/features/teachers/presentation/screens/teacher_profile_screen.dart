@@ -10,7 +10,9 @@ import '../../../../core/widgets/avatar_widget.dart';
 import '../../../../core/widgets/language_chip.dart';
 import '../../../../core/widgets/rating_stars.dart';
 import '../../../../core/widgets/skill_radar_chart.dart';
+import '../../../reviews/data/repositories/review_repository.dart';
 import '../../data/models/teacher_model.dart';
+import '../../data/repositories/teacher_repository.dart';
 
 class TeacherProfileScreen extends StatelessWidget {
   final String teacherId;
@@ -19,8 +21,9 @@ class TeacherProfileScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final teacherRepository = TeacherRepository();
     return FutureBuilder<String?>(
-      future: _resolveTeacherDocId(),
+      future: _resolveTeacherDocId(teacherRepository),
       builder: (context, resolveSnapshot) {
         if (resolveSnapshot.hasError) {
           return const AppErrorState(
@@ -35,7 +38,11 @@ class TeacherProfileScreen extends StatelessWidget {
           return const AppEmptyState(message: 'Teacher not found.');
         }
 
-        return _buildProfileByDocId(context, resolvedTeacherDocId);
+        return _buildProfileByDocId(
+          context,
+          resolvedTeacherDocId,
+          teacherRepository,
+        );
       },
     );
   }
@@ -43,12 +50,11 @@ class TeacherProfileScreen extends StatelessWidget {
   Widget _buildProfileByDocId(
     BuildContext context,
     String resolvedTeacherDocId,
+    TeacherRepository teacherRepository,
   ) {
+    final reviewRepository = ReviewRepository();
     return StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
-      stream: FirebaseFirestore.instance
-          .collection('teachers')
-          .doc(resolvedTeacherDocId)
-          .snapshots(),
+      stream: teacherRepository.watchTeacherDoc(resolvedTeacherDocId),
       builder: (context, teacherSnapshot) {
         if (teacherSnapshot.hasError) {
           return const AppErrorState(
@@ -68,10 +74,10 @@ class TeacherProfileScreen extends StatelessWidget {
         );
 
         return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-          stream: FirebaseFirestore.instance
-              .collection('reviews')
-              .where('teacherId', isEqualTo: teacher.id)
-              .snapshots(),
+          stream: reviewRepository.watchReviewsByTeacherRefs(
+            teacherUid: teacher.uid,
+            teacherDocId: teacher.id,
+          ),
           builder: (context, reviewSnapshot) {
             if (reviewSnapshot.hasError) {
               return const AppErrorState(
@@ -259,7 +265,10 @@ class TeacherProfileScreen extends StatelessWidget {
                           ),
                         ),
                         const SizedBox(height: 24),
-                        _LessonOffersSection(teacherUid: teacher.uid),
+                        _LessonOffersSection(
+                          teacherUid: teacher.uid,
+                          teacherDocId: teacher.id,
+                        ),
                         const SizedBox(height: 24),
                         Container(
                           padding: const EdgeInsets.all(24),
@@ -490,7 +499,10 @@ class TeacherProfileScreen extends StatelessWidget {
                             ),
                           ),
                           const SizedBox(height: 24),
-                          _LessonOffersSection(teacherUid: teacher.uid),
+                          _LessonOffersSection(
+                            teacherUid: teacher.uid,
+                            teacherDocId: teacher.id,
+                          ),
                           const SizedBox(height: 24),
                           Container(
                             padding: const EdgeInsets.all(24),
@@ -685,19 +697,8 @@ class TeacherProfileScreen extends StatelessWidget {
     );
   }
 
-  Future<String?> _resolveTeacherDocId() async {
-    final teachers = FirebaseFirestore.instance.collection('teachers');
-    final doc = await teachers.doc(teacherId).get();
-    if (doc.exists) return doc.id;
-
-    final byUid = await teachers
-        .where('uid', isEqualTo: teacherId)
-        .limit(1)
-        .get();
-    if (byUid.docs.isNotEmpty) {
-      return byUid.docs.first.id;
-    }
-    return null;
+  Future<String?> _resolveTeacherDocId(TeacherRepository teacherRepository) {
+    return teacherRepository.resolveTeacherDocId(teacherId);
   }
 
   _FirestoreReview _mapFirestoreReview(
@@ -755,8 +756,12 @@ class TeacherProfileScreen extends StatelessWidget {
 
 class _LessonOffersSection extends StatelessWidget {
   final String teacherUid;
+  final String teacherDocId;
 
-  const _LessonOffersSection({required this.teacherUid});
+  const _LessonOffersSection({
+    required this.teacherUid,
+    required this.teacherDocId,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -768,10 +773,10 @@ class _LessonOffersSection extends StatelessWidget {
         border: Border.all(color: AppColors.borderLight),
       ),
       child: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-        stream: FirebaseFirestore.instance
-            .collection('lesson_offers')
-            .where('teacherId', isEqualTo: teacherUid)
-            .snapshots(),
+        stream: TeacherRepository().watchLessonOffers(
+          teacherUid: teacherUid,
+          teacherDocId: teacherDocId,
+        ),
         builder: (context, snapshot) {
           if (snapshot.hasError) {
             return const AppErrorState(

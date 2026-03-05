@@ -8,6 +8,7 @@ import 'package:go_router/go_router.dart';
 import '../../../../core/constants/app_colors.dart';
 import '../../../../core/constants/app_typography.dart';
 import '../../../../core/utils/responsive.dart';
+import '../../../booking/data/repositories/booking_repository.dart';
 
 class LessonRoomScreen extends StatefulWidget {
   final String bookingId;
@@ -19,6 +20,7 @@ class LessonRoomScreen extends StatefulWidget {
 }
 
 class _LessonRoomScreenState extends State<LessonRoomScreen> {
+  final BookingRepository _bookingRepository = BookingRepository();
   Timer? _ticker;
   final TextEditingController _notesController = TextEditingController();
   final TextEditingController _chatController = TextEditingController();
@@ -49,10 +51,7 @@ class _LessonRoomScreenState extends State<LessonRoomScreen> {
     }
 
     return StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
-      stream: FirebaseFirestore.instance
-          .collection('bookings')
-          .doc(widget.bookingId)
-          .snapshots(),
+      stream: _bookingRepository.watchBooking(widget.bookingId),
       builder: (context, snapshot) {
         if (snapshot.hasError) {
           return const Center(child: Text('Failed to load lesson room.'));
@@ -324,13 +323,10 @@ class _LessonRoomScreenState extends State<LessonRoomScreen> {
     if (_isUpdatingStatus) return;
     setState(() => _isUpdatingStatus = true);
     try {
-      await FirebaseFirestore.instance
-          .collection('bookings')
-          .doc(widget.bookingId)
-          .update({
-            'status': status,
-            'updatedAt': FieldValue.serverTimestamp(),
-          });
+      await _bookingRepository.updateBookingStatus(
+        bookingId: widget.bookingId,
+        status: status,
+      );
     } on FirebaseException catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(

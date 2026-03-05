@@ -33,7 +33,7 @@ This board translates Phase 1 into executable tickets with dependencies, file ta
   - iOS config file (`ios/Runner/GoogleService-Info.plist`) is still pending if iOS support is required in Phase 1.
 
 ### P1-002 Auth domain models and repository contracts
-- Status: `IN_PROGRESS`
+- Status: `DONE`
 - Priority: `P0`
 - Depends on: `P1-001`
 - Scope:
@@ -50,7 +50,11 @@ This board translates Phase 1 into executable tickets with dependencies, file ta
   - App can observe logged-in/logged-out state via provider.
 - Notes:
   - Model + repository interface + FirebaseAuth implementation + Riverpod providers are added.
-  - Remaining work: automated tests.
+  - Added automated unit tests in `test/features/auth/data/repositories/firebase_auth_repository_test.dart` covering:
+    - auth state mapping (`User` -> `AuthUser`, `null` -> `null`)
+    - sign-in success path and null-user error path
+    - create-user profile bootstrap path
+    - password reset and sign-out delegation
 
 ### P1-003 Auth screens and form validation
 - Status: `IN_PROGRESS`
@@ -70,6 +74,7 @@ This board translates Phase 1 into executable tickets with dependencies, file ta
   - New user onboarding is now implemented after registration (`Student` vs `Teacher` start path).
   - Logout action is now wired in settings.
   - Remaining work: runtime validation against configured Firebase project.
+  - Pending decision: manual live Firebase validation deferred while Phase 2 starts in parallel.
 
 ### P1-004 Route guards and session-aware navigation
 - Status: `IN_PROGRESS`
@@ -86,6 +91,7 @@ This board translates Phase 1 into executable tickets with dependencies, file ta
 - Notes:
   - Redirect rules are implemented in `GoRouter` for auth vs protected routes.
   - Needs runtime verification once Firebase project config is fully connected.
+  - Pending decision: manual live Firebase validation deferred while Phase 2 starts in parallel.
 
 ### P1-005 User profile bootstrap on first login
 - Status: `IN_PROGRESS`
@@ -101,11 +107,12 @@ This board translates Phase 1 into executable tickets with dependencies, file ta
 - Notes:
   - Bootstrap logic is implemented in auth repository for sign-up/sign-in paths.
   - Runtime verification against Firestore is pending.
+  - Pending decision: manual live Firebase validation deferred while Phase 2 starts in parallel.
 
 ## Sprint 2: Firestore data layer + core flows
 
 ### P1-006 Firestore schema and typed repositories
-- Status: `TODO`
+- Status: `DONE`
 - Priority: `P0`
 - Depends on: `P1-001`
 - Scope:
@@ -120,9 +127,22 @@ This board translates Phase 1 into executable tickets with dependencies, file ta
   - `lib/features/*/presentation/providers/`
 - Acceptance criteria:
   - Teacher list/profile, bookings, and reviews can load from Firestore.
+- Notes:
+  - Added typed repository layer for core collections:
+    - `lib/features/booking/data/repositories/booking_repository.dart`
+    - `lib/features/teachers/data/repositories/teacher_repository.dart`
+    - `lib/features/reviews/data/repositories/review_repository.dart`
+    - `lib/features/users/data/repositories/user_repository.dart`
+  - `BookingScreen` now reads/writes through repository methods instead of direct Firestore transaction/query code.
+  - `MyCoursesScreen` and `LeaveReviewScreen` are now migrated to repository-backed streams/actions for bookings/reviews/teachers.
+  - `TeachingDashboardScreen`, `FindTeachersScreen`, and `TeacherProfileScreen` are now migrated to repository-backed streams/actions.
+  - `SettingsScreen` and `ModeToggle` writes/reads are now routed through `UserRepository`/`TeacherRepository`.
+  - `LoginScreen`, `OnboardingScreen`, and `LearningDashboardScreen` are now migrated to repository-backed collection access.
+  - `TeacherOffersScreen` and `LessonRoomScreen` are now migrated to repository-backed streams/actions.
+  - Screen-level direct `FirebaseFirestore.instance` usage is now removed from feature presentation code (remaining usage is in repository/provider layers).
 
 ### P1-007 Booking creation persistence
-- Status: `TODO`
+- Status: `IN_PROGRESS`
 - Priority: `P0`
 - Depends on: `P1-006`
 - Scope:
@@ -134,6 +154,13 @@ This board translates Phase 1 into executable tickets with dependencies, file ta
 - Acceptance criteria:
   - Confirm booking creates a Firestore document.
   - My Courses reflects created booking.
+- Notes:
+  - Booking creation path is centralized in `BookingRepository.createPendingBooking`.
+  - Canonical booking identity is now generated via `BookingRepository.buildSlotId` and stored as both document ID and `slotId`.
+  - Teacher references are normalized for writes (`teacherId` as UID, `teacherDocId` as teacher document ID) while reads preserve compatibility with legacy ID shapes.
+  - `MyCoursesScreen` now resolves teacher linkage with `teacherDocId` fallback to `teacherId` for legacy compatibility.
+  - Remaining work: runtime E2E verification for booking creation visibility across learner/teacher views.
+  - Pending decision: manual live Firebase validation deferred while Phase 2 starts in parallel.
 
 ### P1-008 Teacher accept/reject booking actions
 - Status: `IN_PROGRESS`
@@ -150,6 +177,9 @@ This board translates Phase 1 into executable tickets with dependencies, file ta
 - Notes:
   - Teaching dashboard now loads pending bookings from Firestore and writes status updates (`accepted` / `rejected`).
   - Pending list + pending count are now data-driven for signed-in teacher.
+  - `TeachingDashboardScreen` booking/user/review streams and booking status updates are now wired through repositories (`BookingRepository`, `UserRepository`, `ReviewRepository`).
+  - Remaining work: runtime E2E verification that learner-side course views reflect teacher decisions under both legacy and normalized booking shapes.
+  - Pending decision: manual live Firebase validation deferred while Phase 2 starts in parallel.
 
 ### P1-009 Review submission + teacher metric updates
 - Status: `IN_PROGRESS`
@@ -167,9 +197,12 @@ This board translates Phase 1 into executable tickets with dependencies, file ta
   - Teacher profile/dashboard numbers update after refresh.
 - Notes:
   - Leave Review now submits real `reviews` documents tied to booking + reviewer.
+  - Review submit duplicate-check and create operations are now centralized in `ReviewRepository`.
   - My Courses now resolves review status from `reviews` (no mock `hasReview` dependency).
   - Teacher profile and teaching dashboard now aggregate average rating + skill radar from Firestore reviews.
+  - Teacher profile review + lesson-offer loading now uses repository-backed reference resolution (UID + doc ID compatibility).
   - Remaining work: optional denormalized aggregates in `teachers` docs for query efficiency.
+  - Pending decision: manual live Firebase validation deferred while Phase 2 starts in parallel.
 
 ## Sprint 3: Complete remaining Phase 1 checklist
 
@@ -252,16 +285,28 @@ This board translates Phase 1 into executable tickets with dependencies, file ta
 ## Cross-Cutting: Security, Quality, and Release
 
 ### P1-015 Firestore security rules
-- Status: `TODO`
+- Status: `DONE`
 - Priority: `P0`
 - Depends on: `P1-006`
 - Scope:
   - Enforce access controls for users/bookings/reviews/teachers.
 - File targets:
   - `firestore.rules`
+  - `tests/firestore.rules.test.js`
+  - `firebase.json`
+  - `package.json`
 - Acceptance criteria:
   - Unauthorized reads/writes are denied.
   - Valid user operations pass.
+- Notes:
+  - Added Firestore Emulator rules test harness with explicit allow/deny coverage for:
+    - owner-only user profile writes
+    - teacher-only lesson offer creation
+    - booking-participant-only booking reads
+    - review creation allowed only for completed bookings
+    - admin claim override behavior
+  - Local run command: `npm run rules:test`
+  - Validation result (March 5, 2026): `npm run rules:test` executed successfully in Firestore Emulator and exited with code `0`.
 
 ### P1-016 Error handling and loading states
 - Status: `DONE`
@@ -296,7 +341,7 @@ This board translates Phase 1 into executable tickets with dependencies, file ta
   - Updated smoke widget test to a Firebase-independent shell render check for stable local/CI runs.
 
 ### P1-018 Definition of Done and release checklist
-- Status: `TODO`
+- Status: `IN_PROGRESS`
 - Priority: `P0`
 - Depends on: All Phase 1 tickets
 - Scope:
@@ -308,5 +353,17 @@ This board translates Phase 1 into executable tickets with dependencies, file ta
 - File targets:
   - `README.md`
   - `docs/phase1_firebase_task_board.md`
+  - `docs/phase1_e2e_demo_checklist.md`
 - Acceptance criteria:
   - Phase 1 can be demoed end-to-end with live Firebase-backed flows.
+- Notes:
+  - Automated quality checks passing on March 5, 2026:
+    - `flutter analyze`
+    - `flutter test`
+    - `npm run rules:test`
+  - Added live Firebase E2E checklist: `docs/phase1_e2e_demo_checklist.md`
+  - Remaining work:
+    - Runtime E2E demo validation for booking create/decision/review flows on live Firebase data.
+    - Final ticket closure pass for remaining `IN_PROGRESS` items.
+  - Phase 2 decision: **GO (conditional)**.
+    - Condition: keep the tickets above open as pending live validation; do not mark Phase 1 `DONE` until E2E checklist is executed.

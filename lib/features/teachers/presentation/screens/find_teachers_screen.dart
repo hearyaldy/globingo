@@ -9,6 +9,7 @@ import '../../../../core/widgets/async_state_widgets.dart';
 import '../../../../core/widgets/skill_radar_chart.dart';
 import '../../../../core/widgets/avatar_widget.dart';
 import '../../data/models/teacher_model.dart';
+import '../../data/repositories/teacher_repository.dart';
 
 class FindTeachersScreen extends StatefulWidget {
   const FindTeachersScreen({super.key});
@@ -18,6 +19,8 @@ class FindTeachersScreen extends StatefulWidget {
 }
 
 class _FindTeachersScreenState extends State<FindTeachersScreen> {
+  final TeacherRepository _teacherRepository = TeacherRepository();
+
   String _selectedLanguage = 'All Languages';
   RangeValues _priceRange = const RangeValues(0, 50);
   double _minRating = 0;
@@ -149,7 +152,7 @@ class _FindTeachersScreenState extends State<FindTeachersScreen> {
     final padding = Responsive.screenPadding(context);
 
     return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-      stream: FirebaseFirestore.instance.collection('teachers').snapshots(),
+      stream: _teacherRepository.watchTeachers(),
       builder: (context, snapshot) {
         if (snapshot.hasError) {
           return const AppErrorState(message: 'Failed to load teachers.');

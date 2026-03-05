@@ -7,6 +7,8 @@ import '../../../../core/constants/app_typography.dart';
 import '../../../../core/utils/responsive.dart';
 import '../../../../core/widgets/avatar_widget.dart';
 import '../../../../core/widgets/language_chip.dart';
+import '../../../teachers/data/repositories/teacher_repository.dart';
+import '../../../users/data/repositories/user_repository.dart';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
@@ -17,6 +19,9 @@ class SettingsScreen extends StatefulWidget {
 
 class _SettingsScreenState extends State<SettingsScreen>
     with SingleTickerProviderStateMixin {
+  final UserRepository _userRepository = UserRepository();
+  final TeacherRepository _teacherRepository = TeacherRepository();
+
   late TabController _tabController;
   bool _isLoading = true;
   bool _isSaving = false;
@@ -673,12 +678,8 @@ class _SettingsScreenState extends State<SettingsScreen>
     }
 
     try {
-      final firestore = FirebaseFirestore.instance;
-      final userFuture = firestore.collection('users').doc(user.uid).get();
-      final teacherFuture = firestore
-          .collection('teachers')
-          .doc(user.uid)
-          .get();
+      final userFuture = _userRepository.getUser(user.uid);
+      final teacherFuture = _teacherRepository.getTeacherByUserId(user.uid);
       final results = await Future.wait<DocumentSnapshot<Map<String, dynamic>>>(
         [userFuture, teacherFuture],
       );
@@ -751,10 +752,10 @@ class _SettingsScreenState extends State<SettingsScreen>
   Future<void> _saveUserData(Map<String, dynamic> data) async {
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) return;
-    await FirebaseFirestore.instance.collection('users').doc(user.uid).set({
+    await _userRepository.upsertUser(user.uid, {
       ...data,
       'updatedAt': FieldValue.serverTimestamp(),
-    }, SetOptions(merge: true));
+    });
   }
 
   Future<void> _savePersonalInfo() async {
@@ -820,12 +821,9 @@ class _SettingsScreenState extends State<SettingsScreen>
 
     setState(() => _isSaving = true);
     try {
-      final firestore = FirebaseFirestore.instance;
-      final teacherRef = firestore.collection('teachers').doc(user.uid);
-
       await _saveUserData({'teachingModeEnabled': true});
 
-      await teacherRef.set({
+      await _teacherRepository.upsertTeacherByUserId(user.uid, {
         'uid': user.uid,
         'name': _nameController.text.trim().isEmpty
             ? (user.displayName ?? 'Teacher')
@@ -835,7 +833,7 @@ class _SettingsScreenState extends State<SettingsScreen>
         'hourlyRate': hourlyRate,
         'isActive': _openForTeaching,
         'updatedAt': FieldValue.serverTimestamp(),
-      }, SetOptions(merge: true));
+      });
 
       if (!_openForTeaching) {
         await _saveUserData({'teachingModeEnabled': false});

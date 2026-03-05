@@ -218,6 +218,15 @@ class MainLayout extends ConsumerWidget {
                   context.go('/my-courses');
                 },
               ),
+              _DrawerLink(
+                icon: Icons.account_balance_wallet_outlined,
+                label: AppStrings.wallet,
+                isActive: currentPath == '/wallet',
+                onTap: () {
+                  Navigator.pop(context);
+                  context.go('/wallet');
+                },
+              ),
             ],
             if (currentMode == AppMode.teaching && canTeach) ...[
               _DrawerLink(
@@ -245,6 +254,15 @@ class MainLayout extends ConsumerWidget {
                 onTap: () {
                   Navigator.pop(context);
                   context.go('/my-courses');
+                },
+              ),
+              _DrawerLink(
+                icon: Icons.account_balance_wallet_outlined,
+                label: AppStrings.wallet,
+                isActive: currentPath == '/wallet',
+                onTap: () {
+                  Navigator.pop(context);
+                  context.go('/wallet');
                 },
               ),
             ],
@@ -348,6 +366,11 @@ class MainLayout extends ConsumerWidget {
               isActive: currentPath == '/my-courses',
               onTap: () => context.go('/my-courses'),
             ),
+            _NavLink(
+              label: AppStrings.wallet,
+              isActive: currentPath == '/wallet',
+              onTap: () => context.go('/wallet'),
+            ),
           ],
           if (currentMode == AppMode.teaching && canTeach) ...[
             _NavLink(
@@ -364,6 +387,11 @@ class MainLayout extends ConsumerWidget {
               label: AppStrings.myCourses,
               isActive: currentPath == '/my-courses',
               onTap: () => context.go('/my-courses'),
+            ),
+            _NavLink(
+              label: AppStrings.wallet,
+              isActive: currentPath == '/wallet',
+              onTap: () => context.go('/wallet'),
             ),
           ],
           const Spacer(),

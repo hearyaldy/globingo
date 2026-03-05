@@ -6,12 +6,14 @@ import '../../../../core/constants/app_colors.dart';
 import '../../../../core/constants/app_typography.dart';
 import '../../../../core/utils/responsive.dart';
 import '../../../../core/widgets/async_state_widgets.dart';
+import '../../../teachers/data/repositories/teacher_repository.dart';
 
 class TeacherOffersScreen extends StatelessWidget {
   const TeacherOffersScreen({super.key});
 
   @override
   Widget build(BuildContext context) {
+    final teacherRepository = TeacherRepository();
     final currentUser = FirebaseAuth.instance.currentUser;
     final isMobile = Responsive.isMobile(context);
     if (currentUser == null) {
@@ -22,121 +24,152 @@ class TeacherOffersScreen extends StatelessWidget {
 
     return SingleChildScrollView(
       padding: Responsive.screenPadding(context),
-      child: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-        stream: FirebaseFirestore.instance
-            .collection('lesson_offers')
-            .where('teacherId', isEqualTo: currentUser.uid)
-            .snapshots(),
-        builder: (context, snapshot) {
-          if (snapshot.hasError) {
-            return AppErrorState(
-              message: 'Failed to load offers: ${snapshot.error}',
-            );
+      child: FutureBuilder<String>(
+        future: teacherRepository.resolveTeacherDocIdByUserId(currentUser.uid),
+        builder: (context, teacherIdSnapshot) {
+          if (teacherIdSnapshot.hasError) {
+            return const AppErrorState(message: 'Failed to resolve teacher.');
           }
-          if (!snapshot.hasData) {
+          if (!teacherIdSnapshot.hasData) {
             return const AppLoadingState();
           }
 
-          final docs = [...snapshot.data!.docs]
-            ..sort((a, b) {
-              final aTime = (a.data()['updatedAt'] as Timestamp?)?.toDate();
-              final bTime = (b.data()['updatedAt'] as Timestamp?)?.toDate();
-              if (aTime == null && bTime == null) return 0;
-              if (aTime == null) return 1;
-              if (bTime == null) return -1;
-              return bTime.compareTo(aTime);
-            });
+          return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+            stream: teacherRepository.watchLessonOffers(
+              teacherUid: currentUser.uid,
+              teacherDocId: teacherIdSnapshot.data!,
+            ),
+            builder: (context, snapshot) {
+              if (snapshot.hasError) {
+                return AppErrorState(
+                  message: 'Failed to load offers: ${snapshot.error}',
+                );
+              }
+              if (!snapshot.hasData) {
+                return const AppLoadingState();
+              }
 
-          return Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              if (isMobile)
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text('My Lesson Offers', style: AppTypography.h1),
-                    const SizedBox(height: 12),
-                    SizedBox(
-                      width: double.infinity,
-                      child: ElevatedButton.icon(
-                        onPressed: () => _showOfferDialog(context),
-                        icon: const Icon(Icons.add, size: 18),
-                        label: Text('Add Offer', style: AppTypography.button),
-                      ),
+              final docs = [...snapshot.data!.docs]
+                ..sort((a, b) {
+                  final aTime = (a.data()['updatedAt'] as Timestamp?)?.toDate();
+                  final bTime = (b.data()['updatedAt'] as Timestamp?)?.toDate();
+                  if (aTime == null && bTime == null) return 0;
+                  if (aTime == null) return 1;
+                  if (bTime == null) return -1;
+                  return bTime.compareTo(aTime);
+                });
+
+              return Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  if (isMobile)
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text('My Lesson Offers', style: AppTypography.h1),
+                        const SizedBox(height: 12),
+                        SizedBox(
+                          width: double.infinity,
+                          child: ElevatedButton.icon(
+                            onPressed: () => _showOfferDialog(
+                              context,
+                              teacherRepository: teacherRepository,
+                            ),
+                            icon: const Icon(Icons.add, size: 18),
+                            label: Text(
+                              'Add Offer',
+                              style: AppTypography.button,
+                            ),
+                          ),
+                        ),
+                      ],
+                    )
+                  else
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            'My Lesson Offers',
+                            style: AppTypography.h1,
+                          ),
+                        ),
+                        ElevatedButton.icon(
+                          onPressed: () => _showOfferDialog(
+                            context,
+                            teacherRepository: teacherRepository,
+                          ),
+                          icon: const Icon(Icons.add, size: 18),
+                          label: Text('Add Offer', style: AppTypography.button),
+                        ),
+                      ],
                     ),
-                  ],
-                )
-              else
-                Row(
-                  children: [
-                    Expanded(
-                      child: Text('My Lesson Offers', style: AppTypography.h1),
-                    ),
-                    ElevatedButton.icon(
-                      onPressed: () => _showOfferDialog(context),
-                      icon: const Icon(Icons.add, size: 18),
-                      label: Text('Add Offer', style: AppTypography.button),
-                    ),
-                  ],
-                ),
-              const SizedBox(height: 12),
-              Text(
-                'Create lesson packages students can book.',
-                style: AppTypography.bodyMedium.copyWith(
-                  color: AppColors.textSecondary,
-                ),
-              ),
-              const SizedBox(height: 24),
-              if (docs.isEmpty)
-                Container(
-                  width: double.infinity,
-                  padding: const EdgeInsets.all(24),
-                  decoration: BoxDecoration(
-                    color: AppColors.surface,
-                    borderRadius: BorderRadius.circular(16),
-                    border: Border.all(color: AppColors.borderLight),
-                  ),
-                  child: Text(
-                    'No offers yet. Add your first lesson offer.',
+                  const SizedBox(height: 12),
+                  Text(
+                    'Create lesson packages students can book.',
                     style: AppTypography.bodyMedium.copyWith(
                       color: AppColors.textSecondary,
                     ),
                   ),
-                )
-              else
-                Wrap(
-                  spacing: 16,
-                  runSpacing: 16,
-                  children: docs.map((doc) {
-                    final data = doc.data();
-                    final title = (data['title'] as String?) ?? 'Untitled';
-                    final language =
-                        (data['language'] as String?) ?? 'Language';
-                    final level = (data['level'] as String?) ?? 'All levels';
-                    final duration =
-                        (data['durationMin'] as num?)?.toInt() ?? 60;
-                    final price = (data['price'] as num?)?.toDouble() ?? 0;
-                    final isActive = data['isActive'] == true;
-                    return _OfferCard(
-                      isMobile: isMobile,
-                      title: title,
-                      language: language,
-                      level: level,
-                      duration: duration,
-                      price: price,
-                      isActive: isActive,
-                      onEdit: () => _showOfferDialog(
-                        context,
-                        docId: doc.id,
-                        initialData: data,
+                  const SizedBox(height: 24),
+                  if (docs.isEmpty)
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.all(24),
+                      decoration: BoxDecoration(
+                        color: AppColors.surface,
+                        borderRadius: BorderRadius.circular(16),
+                        border: Border.all(color: AppColors.borderLight),
                       ),
-                      onDelete: () => _deleteOffer(context, doc.id),
-                      onToggleActive: (value) =>
-                          _toggleActive(context, doc.id, value),
-                    );
-                  }).toList(),
-                ),
-            ],
+                      child: Text(
+                        'No offers yet. Add your first lesson offer.',
+                        style: AppTypography.bodyMedium.copyWith(
+                          color: AppColors.textSecondary,
+                        ),
+                      ),
+                    )
+                  else
+                    Wrap(
+                      spacing: 16,
+                      runSpacing: 16,
+                      children: docs.map((doc) {
+                        final data = doc.data();
+                        final title = (data['title'] as String?) ?? 'Untitled';
+                        final language =
+                            (data['language'] as String?) ?? 'Language';
+                        final level =
+                            (data['level'] as String?) ?? 'All levels';
+                        final duration =
+                            (data['durationMin'] as num?)?.toInt() ?? 60;
+                        final price = (data['price'] as num?)?.toDouble() ?? 0;
+                        final isActive = data['isActive'] == true;
+                        return _OfferCard(
+                          isMobile: isMobile,
+                          title: title,
+                          language: language,
+                          level: level,
+                          duration: duration,
+                          price: price,
+                          isActive: isActive,
+                          onEdit: () => _showOfferDialog(
+                            context,
+                            teacherRepository: teacherRepository,
+                            docId: doc.id,
+                            initialData: data,
+                          ),
+                          onDelete: () =>
+                              _deleteOffer(context, teacherRepository, doc.id),
+                          onToggleActive: (value) => _toggleActive(
+                            context,
+                            teacherRepository,
+                            doc.id,
+                            value,
+                          ),
+                        );
+                      }).toList(),
+                    ),
+                ],
+              );
+            },
           );
         },
       ),
@@ -145,17 +178,15 @@ class TeacherOffersScreen extends StatelessWidget {
 
   Future<void> _toggleActive(
     BuildContext context,
+    TeacherRepository teacherRepository,
     String docId,
     bool value,
   ) async {
     try {
-      await FirebaseFirestore.instance
-          .collection('lesson_offers')
-          .doc(docId)
-          .set({
-            'isActive': value,
-            'updatedAt': FieldValue.serverTimestamp(),
-          }, SetOptions(merge: true));
+      await teacherRepository.setLessonOfferActive(
+        offerId: docId,
+        isActive: value,
+      );
     } on FirebaseException catch (e) {
       if (!context.mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -164,12 +195,13 @@ class TeacherOffersScreen extends StatelessWidget {
     }
   }
 
-  Future<void> _deleteOffer(BuildContext context, String docId) async {
+  Future<void> _deleteOffer(
+    BuildContext context,
+    TeacherRepository teacherRepository,
+    String docId,
+  ) async {
     try {
-      await FirebaseFirestore.instance
-          .collection('lesson_offers')
-          .doc(docId)
-          .delete();
+      await teacherRepository.deleteLessonOffer(docId);
       if (!context.mounted) return;
       ScaffoldMessenger.of(
         context,
@@ -184,6 +216,7 @@ class TeacherOffersScreen extends StatelessWidget {
 
   Future<void> _showOfferDialog(
     BuildContext context, {
+    required TeacherRepository teacherRepository,
     String? docId,
     Map<String, dynamic>? initialData,
   }) async {
@@ -388,27 +421,22 @@ class TeacherOffersScreen extends StatelessWidget {
 
                           setState(() => isSaving = true);
                           try {
-                            final ref = docId == null
-                                ? FirebaseFirestore.instance
-                                      .collection('lesson_offers')
-                                      .doc()
-                                : FirebaseFirestore.instance
-                                      .collection('lesson_offers')
-                                      .doc(docId);
-
-                            await ref.set({
-                              'teacherId': currentUser.uid,
-                              'title': title,
-                              'description': description,
-                              'language': language,
-                              'level': level.isEmpty ? 'All levels' : level,
-                              'durationMin': duration,
-                              'price': price,
-                              'isActive': isActive,
-                              'updatedAt': FieldValue.serverTimestamp(),
-                              if (docId == null)
-                                'createdAt': FieldValue.serverTimestamp(),
-                            }, SetOptions(merge: true));
+                            await teacherRepository.upsertLessonOffer(
+                              teacherUid: currentUser.uid,
+                              offerId: docId,
+                              data: {
+                                'title': title,
+                                'description': description,
+                                'language': language,
+                                'level': level.isEmpty ? 'All levels' : level,
+                                'durationMin': duration,
+                                'price': price,
+                                'isActive': isActive,
+                                'updatedAt': FieldValue.serverTimestamp(),
+                                if (docId == null)
+                                  'createdAt': FieldValue.serverTimestamp(),
+                              },
+                            );
 
                             if (!context.mounted) return;
                             Navigator.pop(context);

@@ -14,6 +14,7 @@ import '../../features/lessons/presentation/screens/teacher_offers_screen.dart';
 import '../../features/lessons/presentation/screens/lesson_room_screen.dart';
 import '../../features/reviews/presentation/screens/leave_review_screen.dart';
 import '../../features/settings/presentation/screens/settings_screen.dart';
+import '../../features/wallet/presentation/screens/wallet_screen.dart';
 import '../../features/booking/presentation/screens/booking_screen.dart';
 import '../../features/auth/presentation/screens/login_screen.dart';
 import '../../features/auth/presentation/screens/register_screen.dart';
@@ -32,6 +33,7 @@ class AppRoutes {
   static const String booking = '/booking/:teacherId';
   static const String review = '/review/:lessonId';
   static const String settings = '/settings';
+  static const String wallet = '/wallet';
   static const String login = '/login';
   static const String register = '/register';
   static const String forgotPassword = '/forgot-password';
@@ -170,6 +172,11 @@ GoRouter _buildRouter() {
             path: AppRoutes.settings,
             pageBuilder: (context, state) =>
                 const NoTransitionPage(child: SettingsScreen()),
+          ),
+          GoRoute(
+            path: AppRoutes.wallet,
+            pageBuilder: (context, state) =>
+                const NoTransitionPage(child: WalletScreen()),
           ),
           GoRoute(
             path: AppRoutes.teacherProfile,

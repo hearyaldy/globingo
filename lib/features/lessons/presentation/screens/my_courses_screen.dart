@@ -8,6 +8,9 @@ import '../../../../core/constants/app_typography.dart';
 import '../../../../core/utils/responsive.dart';
 import '../../../../core/widgets/async_state_widgets.dart';
 import '../../../../core/widgets/avatar_widget.dart';
+import '../../../booking/data/repositories/booking_repository.dart';
+import '../../../reviews/data/repositories/review_repository.dart';
+import '../../../teachers/data/repositories/teacher_repository.dart';
 
 enum LessonStatus { upcoming, completed, cancelled }
 
@@ -46,6 +49,10 @@ class MyCoursesScreen extends StatefulWidget {
 
 class _MyCoursesScreenState extends State<MyCoursesScreen>
     with SingleTickerProviderStateMixin {
+  final BookingRepository _bookingRepository = BookingRepository();
+  final TeacherRepository _teacherRepository = TeacherRepository();
+  final ReviewRepository _reviewRepository = ReviewRepository();
+
   late TabController _tabController;
 
   @override
@@ -81,10 +88,7 @@ class _MyCoursesScreenState extends State<MyCoursesScreen>
     return SingleChildScrollView(
       padding: Responsive.screenPadding(context),
       child: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-        stream: FirebaseFirestore.instance
-            .collection('bookings')
-            .where('learnerId', isEqualTo: currentUser.uid)
-            .snapshots(),
+        stream: _bookingRepository.watchLearnerBookings(currentUser.uid),
         builder: (context, snapshot) {
           if (snapshot.hasError) {
             return AppErrorState(
@@ -96,9 +100,7 @@ class _MyCoursesScreenState extends State<MyCoursesScreen>
           }
 
           return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-            stream: FirebaseFirestore.instance
-                .collection('teachers')
-                .snapshots(),
+            stream: _teacherRepository.watchTeachers(),
             builder: (context, teachersSnapshot) {
               if (teachersSnapshot.hasError) {
                 return const AppErrorState(
@@ -113,7 +115,8 @@ class _MyCoursesScreenState extends State<MyCoursesScreen>
               for (final teacherDoc in teachersSnapshot.data!.docs) {
                 final data = teacherDoc.data();
                 final uid = (data['uid'] as String?)?.trim() ?? '';
-                final isActive = data['isActive'] == true;
+                final isActive =
+                    data['isActive'] == true || data['active'] == true;
                 if (uid.isEmpty || !isActive) continue;
                 final name = (data['name'] as String?)?.trim();
                 if (name != null && name.isNotEmpty) {
@@ -123,10 +126,9 @@ class _MyCoursesScreenState extends State<MyCoursesScreen>
               }
 
               return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-                stream: FirebaseFirestore.instance
-                    .collection('reviews')
-                    .where('reviewerId', isEqualTo: currentUser.uid)
-                    .snapshots(),
+                stream: _reviewRepository.watchReviewsByReviewer(
+                  currentUser.uid,
+                ),
                 builder: (context, reviewsSnapshot) {
                   if (reviewsSnapshot.hasError) {
                     return const AppErrorState(
@@ -144,16 +146,18 @@ class _MyCoursesScreenState extends State<MyCoursesScreen>
 
                   final lessons = snapshot.data!.docs
                       .where((doc) {
-                        final teacherId =
-                            (doc.data()['teacherId'] as String?) ?? '';
-                        return activeTeacherNames.containsKey(teacherId);
+                        final teacherKey = _bookingTeacherLookupKey(doc.data());
+                        return teacherKey != null &&
+                            activeTeacherNames.containsKey(teacherKey);
                       })
                       .map(
                         (doc) => _mapBookingToLesson(
                           doc,
                           reviewedBookingIds,
                           teacherNameOverride:
-                              activeTeacherNames[doc.data()['teacherId']],
+                              activeTeacherNames[_bookingTeacherLookupKey(
+                                doc.data(),
+                              )],
                         ),
                       )
                       .toList();
@@ -243,6 +247,18 @@ class _MyCoursesScreenState extends State<MyCoursesScreen>
         },
       ),
     );
+  }
+
+  String? _bookingTeacherLookupKey(Map<String, dynamic> bookingData) {
+    final teacherDocId = (bookingData['teacherDocId'] as String?)?.trim();
+    if (teacherDocId != null && teacherDocId.isNotEmpty) {
+      return teacherDocId;
+    }
+    final teacherId = (bookingData['teacherId'] as String?)?.trim();
+    if (teacherId != null && teacherId.isNotEmpty) {
+      return teacherId;
+    }
+    return null;
   }
 
   Lesson _mapBookingToLesson(
